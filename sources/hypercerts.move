@@ -1,32 +1,18 @@
 module healing_humanity::hypercerts {
-
     use sui::object::{Self, UID};
     use sui::tx_context::TxContext;
-    use sui::transfer;
-    use std::string::String;
 
-    struct HyperCert has key {
+    struct Hypercert has key {
         id: UID,
-        donor: address,
         campaign_id: u64,
-        impact: String
+        owner: address,
     }
 
-    public fun mint(
-        donor: address,
-        campaign_id: u64,
-        impact: String,
-        ctx: &mut TxContext
-    ): HyperCert {
-        HyperCert {
+    public entry fun mint(ctx: &mut TxContext, campaign_id: u64): Hypercert {
+        Hypercert {
             id: object::new(ctx),
-            donor,
             campaign_id,
-            impact
+            owner: tx_context::sender(ctx),
         }
-    }
-
-    public fun transfer_to(cert: HyperCert, recipient: address) {
-        transfer::public_transfer(cert, recipient);
     }
 }
