@@ -1,0 +1,13 @@
+module healing_humanity::events {
+    use sui::event;
+
+    struct CampaignCreated has copy, drop {
+        creator: address,
+        goal: u64,
+    }
+
+    struct FundsReleased has copy, drop {
+        campaign_id: u64,
+        amount: u64,
+    }
+}
