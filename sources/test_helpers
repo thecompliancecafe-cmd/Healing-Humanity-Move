@@ -1,0 +1,5 @@
+module healing_humanity::test_helpers {
+    public fun addr(x: u8): address {
+        @0x1
+    }
+}
