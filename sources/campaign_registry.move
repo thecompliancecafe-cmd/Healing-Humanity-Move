@@ -1,22 +1,23 @@
 module healing_humanity::campaign_registry {
-    use sui::object::{Self, UID};
+    use sui::object::{UID, object};
     use sui::tx_context::TxContext;
+    use std::string;
 
-    struct Campaign has store {
-        creator: address,
-        goal: u64,
-        raised: u64,
-    }
-
-    struct CampaignRegistry has key {
+    struct Campaign has key {
         id: UID,
-        campaigns: vector<Campaign>,
+        name: string::String,
+        target_goal: u64,
     }
 
-    public entry fun init(ctx: &mut TxContext): CampaignRegistry {
-        CampaignRegistry {
+    public fun create(
+        name: string::String,
+        target_goal: u64,
+        ctx: &mut TxContext
+    ): Campaign {
+        Campaign {
             id: object::new(ctx),
-            campaigns: vector::empty(),
+            name,
+            target_goal,
         }
     }
 }
