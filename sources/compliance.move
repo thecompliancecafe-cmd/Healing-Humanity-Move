@@ -1,24 +1,32 @@
 module healing_humanity::compliance {
-    use sui::object::{Self, UID};
+    use sui::object::{UID, object};
     use sui::tx_context::TxContext;
+    use sui::table::Table;
 
     struct ComplianceRegistry has key {
         id: UID,
-        approved: vector<address>,
+        approved: Table<address, bool>,
     }
 
-    public entry fun init(ctx: &mut TxContext): ComplianceRegistry {
-        ComplianceRegistry {
-            id: object::new(ctx),
-            approved: vector::empty(),
-        }
+    struct ComplianceAdminCap has key {
+        id: UID,
     }
 
-    public fun approve(reg: &mut ComplianceRegistry, addr: address) {
-        vector::push_back(&mut reg.approved, addr);
+    public fun init(ctx: &mut TxContext): (ComplianceRegistry, ComplianceAdminCap) {
+        (
+            ComplianceRegistry {
+                id: object::new(ctx),
+                approved: Table::new(ctx),
+            },
+            ComplianceAdminCap { id: object::new(ctx) }
+        )
     }
 
-    public fun is_approved(reg: &ComplianceRegistry, addr: address): bool {
-        vector::contains(&reg.approved, &addr)
+    public fun approve(_: &ComplianceAdminCap, reg: &mut ComplianceRegistry, addr: address) {
+        Table::add(&mut reg.approved, addr, true);
+    }
+
+    public fun is_compliant(reg: &ComplianceRegistry, addr: address): bool {
+        Table::contains(&reg.approved, addr)
     }
 }
