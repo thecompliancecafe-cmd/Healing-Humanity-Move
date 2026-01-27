@@ -5,18 +5,27 @@ module healing_humanity::circuit_breaker {
     struct CircuitBreaker has key {
         id: UID,
         paused: bool,
-        admin: address,
     }
 
-    public fun init_circuit(admin: address, ctx: &mut TxContext): CircuitBreaker {
-        CircuitBreaker { id: object::new(ctx), paused: false, admin }
+    struct CircuitAdminCap has key {
+        id: UID,
     }
 
-    public fun pause(cb: &mut CircuitBreaker) {
+    public fun init(ctx: &mut TxContext): (CircuitBreaker, CircuitAdminCap) {
+        (
+            CircuitBreaker {
+                id: object::new(ctx),
+                paused: false,
+            },
+            CircuitAdminCap { id: object::new(ctx) }
+        )
+    }
+
+    public fun pause(_: &CircuitAdminCap, cb: &mut CircuitBreaker) {
         cb.paused = true;
     }
 
-    public fun unpause(cb: &mut CircuitBreaker) {
+    public fun unpause(_: &CircuitAdminCap, cb: &mut CircuitBreaker) {
         cb.paused = false;
     }
 }
