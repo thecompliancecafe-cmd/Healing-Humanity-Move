@@ -1,24 +1,32 @@
 module healing_humanity::ai_oracle {
-    use sui::object::{Self, UID};
+    use sui::object::{UID, object};
     use sui::tx_context::TxContext;
+    use sui::table::Table;
 
     struct OracleRegistry has key {
         id: UID,
-        oracles: vector<address>,
+        oracles: Table<address, bool>,
     }
 
-    public entry fun init(ctx: &mut TxContext): OracleRegistry {
-        OracleRegistry {
-            id: object::new(ctx),
-            oracles: vector::empty(),
-        }
+    struct OracleAdminCap has key {
+        id: UID,
     }
 
-    public fun add_oracle(reg: &mut OracleRegistry, oracle: address) {
-        vector::push_back(&mut reg.oracles, oracle);
+    public fun init(ctx: &mut TxContext): (OracleRegistry, OracleAdminCap) {
+        (
+            OracleRegistry {
+                id: object::new(ctx),
+                oracles: Table::new(ctx),
+            },
+            OracleAdminCap { id: object::new(ctx) }
+        )
+    }
+
+    public fun add_oracle(_: &OracleAdminCap, reg: &mut OracleRegistry, addr: address) {
+        Table::add(&mut reg.oracles, addr, true);
     }
 
     public fun is_oracle(reg: &OracleRegistry, addr: address): bool {
-        vector::contains(&reg.oracles, &addr)
+        Table::contains(&reg.oracles, addr)
     }
 }
