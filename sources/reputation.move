@@ -1,20 +1,22 @@
 module healing_humanity::reputation {
-    use sui::object::{Self, UID};
+    use sui::object::{UID, object};
     use sui::tx_context::TxContext;
 
-    struct Reputation has key {
+    struct XP has key {
         id: UID,
-        score: u64,
+        owner: address,
+        xp: u64,
     }
 
-    public entry fun init(ctx: &mut TxContext): Reputation {
-        Reputation {
+    public fun award(
+        owner: address,
+        xp: u64,
+        ctx: &mut TxContext
+    ): XP {
+        XP {
             id: object::new(ctx),
-            score: 0,
+            owner,
+            xp,
         }
-    }
-
-    public fun increase(rep: &mut Reputation, value: u64) {
-        rep.score = rep.score + value;
     }
 }
