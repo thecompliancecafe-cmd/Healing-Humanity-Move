@@ -1,17 +1,20 @@
 module healing_humanity::treasury {
-    use sui::object::{Self, UID};
-    use sui::balance::{Self, Balance};
+    use sui::object::{UID, object};
     use sui::tx_context::TxContext;
+    use sui::coin::Coin;
 
-    struct Treasury has key {
+    struct Treasury<T> has key {
         id: UID,
-        funds: Balance<SUI>,
+        balance: Coin<T>,
     }
 
-    public entry fun init(ctx: &mut TxContext): Treasury {
+    public fun create<T>(
+        coin: Coin<T>,
+        ctx: &mut TxContext
+    ): Treasury<T> {
         Treasury {
             id: object::new(ctx),
-            funds: balance::zero(),
+            balance: coin,
         }
     }
 }
