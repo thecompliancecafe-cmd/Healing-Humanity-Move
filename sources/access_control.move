@@ -1,36 +1,41 @@
 module healing_humanity::access_control {
-    use std::vector;
-    use sui::signer;
+    use sui::object::{UID, object};
+    use sui::tx_context::TxContext;
+    use sui::table::Table;
 
+    /// Main role registry object
     struct Roles has key {
-        admin: address,
-        oracles: vector<address>,
-        compliance_auth: vector<address>,
-        treasury_signers: vector<address>,
-        auditors: vector<address>,
+        id: UID,
+        oracles: Table<address, bool>,
+        compliance: Table<address, bool>,
+        auditors: Table<address, bool>,
+        treasury_signers: Table<address, bool>,
     }
 
-    public fun init_roles(
-        admin: address,
-        oracles: vector<address>,
-        compliance_auth: vector<address>,
-        treasury_signers: vector<address>,
-        auditors: vector<address>
-    ): Roles {
-        Roles {
-            admin,
-            oracles,
-            compliance_auth,
-            treasury_signers,
-            auditors,
-        }
+    /// Admin capability = permission
+    struct AdminCap has key {
+        id: UID,
     }
 
-    public fun is_admin(roles: &Roles, addr: address): bool {
-        roles.admin == addr
+    /// Initializes roles + admin capability
+    public fun init(ctx: &mut TxContext): (Roles, AdminCap) {
+        (
+            Roles {
+                id: object::new(ctx),
+                oracles: Table::new(ctx),
+                compliance: Table::new(ctx),
+                auditors: Table::new(ctx),
+                treasury_signers: Table::new(ctx),
+            },
+            AdminCap { id: object::new(ctx) }
+        )
     }
 
-    public fun has_role(role_vec: &vector<address>, addr: address): bool {
-        vector::contains(role_vec, addr)
+    public fun add_oracle(_: &AdminCap, roles: &mut Roles, addr: address) {
+        Table::add(&mut roles.oracles, addr, true);
+    }
+
+    public fun is_oracle(roles: &Roles, addr: address): bool {
+        Table::contains(&roles.oracles, addr)
     }
 }
