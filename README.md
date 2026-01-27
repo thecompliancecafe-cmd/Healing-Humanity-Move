@@ -125,9 +125,8 @@ Healing Humanity aligns with:
 
 ## Deployment Status
 
-* Sui Testnet ready
-* Sui Mainnet ready
-* No chain-specific forks required
+* Sui Testnet 
+
 
 ---
 
@@ -151,5 +150,3 @@ A **settlement layer**.
 * Frontend integrations
 * Ecosystem pilots
 
-
-Just tell me which one you want.
