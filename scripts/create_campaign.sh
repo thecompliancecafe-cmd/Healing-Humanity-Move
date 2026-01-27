@@ -1,12 +1,20 @@
 #!/bin/bash
+set -e
 source .env
 
 CAMPAIGN_NAME="Vaccines for Children"
-TARGET_GOAL=1000000000   # in MIST
+TARGET=1000000000
+
+echo "Creating Campaign..."
 
 sui client call \
   --package $PACKAGE_ID \
   --module campaign_registry \
-  --function create_campaign \
-  --args "$CAMPAIGN_NAME" $TARGET_GOAL \
-  --gas-budget 50000000
+  --function create \
+  --args "$CAMPAIGN_NAME" $TARGET \
+  --gas-budget 50000000 \
+  --json > campaign.json
+
+CAMPAIGN_ID=$(jq -r '.objectChanges[] | select(.objectType | contains("Campaign")) | .objectId' campaign.json)
+
+echo "CAMPAIGN_ID=$CAMPAIGN_ID" >> .env
