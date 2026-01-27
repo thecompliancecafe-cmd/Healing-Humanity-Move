@@ -1,9 +1,13 @@
 [package]
 name = "healing_humanity"
 version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "main" }
 
 [addresses]
 healing_humanity = "0x0"
 
-[dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "main" }
+[dev-addresses]
+healing_humanity = "0x0"
