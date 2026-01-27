@@ -1,5 +1,22 @@
 module healing_humanity::protocol_fees {
-    public fun calculate(amount: u64, bps: u64): u64 {
-        amount * bps / 10_000
+    use sui::object::{UID, object};
+    use sui::tx_context::TxContext;
+
+    struct FeeConfig has key {
+        id: UID,
+        treasury: address,
+        fee_bps: u64,
+    }
+
+    public fun init(
+        treasury: address,
+        fee_bps: u64,
+        ctx: &mut TxContext
+    ): FeeConfig {
+        FeeConfig {
+            id: object::new(ctx),
+            treasury,
+            fee_bps,
+        }
     }
 }
