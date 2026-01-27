@@ -1,5 +1,14 @@
 module healing_humanity::test_helpers {
-    public fun addr(x: u8): address {
-        @0x1
+    use sui::object::{UID, object};
+    use sui::tx_context::TxContext;
+
+    struct MockOracle has key {
+        id: UID,
+    }
+
+    public fun create(ctx: &mut TxContext): MockOracle {
+        MockOracle {
+            id: object::new(ctx),
+        }
     }
 }
