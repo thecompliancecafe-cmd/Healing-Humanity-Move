@@ -1,20 +1,28 @@
 module healing_humanity::milestone_escrow {
-    use sui::object::{Self, UID};
+    use sui::object::{UID, ID, object};
+    use sui::coin::{Coin};
     use sui::tx_context::TxContext;
+    use sui::coin;
 
-    struct Escrow has key {
+    struct Vault<T> has key {
         id: UID,
-        released: bool,
+        campaign_id: ID,
+        funds: Coin<T>,
     }
 
-    public entry fun init(ctx: &mut TxContext): Escrow {
-        Escrow {
+    public fun create<T>(
+        campaign_id: ID,
+        coin: Coin<T>,
+        ctx: &mut TxContext
+    ): Vault<T> {
+        Vault {
             id: object::new(ctx),
-            released: false,
+            campaign_id,
+            funds: coin,
         }
     }
 
-    public fun release(e: &mut Escrow) {
-        e.released = true;
+    public fun deposit<T>(vault: &mut Vault<T>, coin_in: Coin<T>) {
+        coin::merge(&mut vault.funds, coin_in);
     }
 }
