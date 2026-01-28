@@ -1,32 +1,52 @@
 module healing_humanity::compliance {
-    use sui::object::{UID, object};
+    use sui::object::UID;
     use sui::tx_context::TxContext;
-    use sui::table::Table;
+    use sui::table::{Self, Table};
+    use sui::transfer;
 
-    struct ComplianceRegistry has key {
+    /// Shared compliance registry
+    public struct ComplianceRegistry has key {
         id: UID,
         approved: Table<address, bool>,
     }
 
-    struct ComplianceAdminCap has key {
+    /// Admin capability for compliance approvals
+    public struct ComplianceAdminCap has key {
         id: UID,
     }
 
-    public fun init(ctx: &mut TxContext): (ComplianceRegistry, ComplianceAdminCap) {
-        (
-            ComplianceRegistry {
-                id: object::new(ctx),
-                approved: Table::new(ctx),
-            },
-            ComplianceAdminCap { id: object::new(ctx) }
-        )
+    /// Package initialization (runs once at publish)
+    fun init(ctx: &mut TxContext) {
+        let registry = ComplianceRegistry {
+            id: UID::new(ctx),
+            approved: Table::new(ctx),
+        };
+
+        let admin_cap = ComplianceAdminCap {
+            id: UID::new(ctx),
+        };
+
+        // Make registry publicly readable / mutable
+        transfer::share_object(registry);
+
+        // Give admin permission to deployer
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
-    public fun approve(_: &ComplianceAdminCap, reg: &mut ComplianceRegistry, addr: address) {
+    /// Approve an address as compliant (admin only)
+    public fun approve(
+        _admin: &ComplianceAdminCap,
+        reg: &mut ComplianceRegistry,
+        addr: address
+    ) {
         Table::add(&mut reg.approved, addr, true);
     }
 
-    public fun is_compliant(reg: &ComplianceRegistry, addr: address): bool {
+    /// Check if an address is compliant
+    public fun is_compliant(
+        reg: &ComplianceRegistry,
+        addr: address
+    ): bool {
         Table::contains(&reg.approved, addr)
     }
 }
