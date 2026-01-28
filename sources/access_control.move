@@ -1,10 +1,11 @@
 module healing_humanity::access_control {
-    use sui::object::{UID, object};
+    use sui::object::UID;
     use sui::tx_context::TxContext;
-    use sui::table::Table;
+    use sui::table::{Self, Table};
+    use sui::transfer;
 
-    /// Main role registry object
-    struct Roles has key {
+    /// Main role registry object (shared)
+    public struct Roles has key {
         id: UID,
         oracles: Table<address, bool>,
         compliance: Table<address, bool>,
@@ -12,30 +13,47 @@ module healing_humanity::access_control {
         treasury_signers: Table<address, bool>,
     }
 
-    /// Admin capability = permission
-    struct AdminCap has key {
+    /// Admin capability (owned)
+    public struct AdminCap has key {
         id: UID,
     }
 
-    /// Initializes roles + admin capability
-    public fun init(ctx: &mut TxContext): (Roles, AdminCap) {
-        (
-            Roles {
-                id: object::new(ctx),
-                oracles: Table::new(ctx),
-                compliance: Table::new(ctx),
-                auditors: Table::new(ctx),
-                treasury_signers: Table::new(ctx),
-            },
-            AdminCap { id: object::new(ctx) }
-        )
+    /// Package initialization
+    /// This runs ONCE at publish time
+    fun init(ctx: &mut TxContext) {
+        let roles = Roles {
+            id: UID::new(ctx),
+            oracles: Table::new(ctx),
+            compliance: Table::new(ctx),
+            auditors: Table::new(ctx),
+            treasury_signers: Table::new(ctx),
+        };
+
+        let admin_cap = AdminCap {
+            id: UID::new(ctx),
+        };
+
+        // Share the Roles object so everyone can read it
+        transfer::share_object(roles);
+
+        // Give AdminCap to the publisher
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
-    public fun add_oracle(_: &AdminCap, roles: &mut Roles, addr: address) {
+    /// Add an oracle address (admin only)
+    public fun add_oracle(
+        _admin: &AdminCap,
+        roles: &mut Roles,
+        addr: address
+    ) {
         Table::add(&mut roles.oracles, addr, true);
     }
 
-    public fun is_oracle(roles: &Roles, addr: address): bool {
+    /// Check if an address is an oracle
+    public fun is_oracle(
+        roles: &Roles,
+        addr: address
+    ): bool {
         Table::contains(&roles.oracles, addr)
     }
 }
