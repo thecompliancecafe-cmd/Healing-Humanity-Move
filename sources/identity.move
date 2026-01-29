@@ -1,21 +1,24 @@
 module healing_humanity::identity {
-    use sui::object::{UID, object};
+    use sui::object::UID;
     use sui::tx_context::TxContext;
-    use std::string;
+    use std::string::String;
 
-    struct Identity has key {
+    /// On-chain identity object (NGO / individual)
+    public struct Identity has key {
         id: UID,
-        name: string::String,
+        name: String,
         wallet: address,
     }
 
+    /// Create a new identity
+    /// NOTE: currently permissionless (anyone can create)
     public fun create(
-        name: string::String,
+        name: String,
         wallet: address,
         ctx: &mut TxContext
     ): Identity {
         Identity {
-            id: object::new(ctx),
+            id: sui::object::new(ctx),
             name,
             wallet,
         }
