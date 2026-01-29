@@ -18,7 +18,7 @@ module healing_humanity::identity {
         ctx: &mut TxContext
     ): Identity {
         Identity {
-            id: sui::object::new(ctx),
+            id: UID::new(ctx),
             name,
             wallet,
         }
