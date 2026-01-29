@@ -18,7 +18,7 @@ module healing_humanity::reputation {
         ctx: &mut TxContext
     ): XP {
         XP {
-            id: sui::object::new(ctx),
+            id: UID::new(ctx),
             owner,
             xp,
         }
