@@ -1,7 +1,7 @@
 module healing_humanity::compliance {
     use sui::object::UID;
-    use sui::tx_context::{Self, TxContext};
-    use sui::table::{Self, Table};
+    use sui::tx_context::TxContext;
+    use sui::table::Table;
     use sui::transfer;
 
     /// Shared compliance registry
@@ -15,8 +15,8 @@ module healing_humanity::compliance {
         id: UID,
     }
 
-    /// Package initialization (runs once at publish)
-    fun init(ctx: &mut TxContext) {
+    /// Initialize compliance registry (callable once)
+    public fun init(ctx: &mut TxContext): (ComplianceRegistry, ComplianceAdminCap) {
         let registry = ComplianceRegistry {
             id: UID::new(ctx),
             approved: Table::new(ctx),
@@ -29,8 +29,8 @@ module healing_humanity::compliance {
         // Share registry so it can be accessed globally
         transfer::share_object(registry);
 
-        // Transfer admin capability to deployer
-        transfer::transfer(admin_cap, tx_context::sender(ctx));
+        // Return admin capability to caller
+        (registry, admin_cap)
     }
 
     /// Approve an address as compliant (admin only)
