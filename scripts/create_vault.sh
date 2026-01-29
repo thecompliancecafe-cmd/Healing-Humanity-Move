@@ -59,7 +59,7 @@ if ! grep -q "^VAULT_ID=" .env; then
 fi
 
 if ! grep -q "^ESCROW_ADMIN_CAP_ID=" .env; then
-  echo "ESCROW_ADMIN_CAP_ID=$ESCROW_ADMIN_CAP_ID" >> .env
+  echo "ESCROW_ADMIN_CAP=$ESCROW_ADMIN_CAP_ID" >> .env
 fi
 
 echo "✅ Escrow Vault created"
