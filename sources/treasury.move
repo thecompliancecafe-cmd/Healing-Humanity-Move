@@ -14,7 +14,7 @@ module healing_humanity::treasury {
     /// Create an empty treasury
     public fun create(ctx: &mut TxContext): Treasury {
         Treasury {
-            id: sui::object::new(ctx),
+            id: UID::new(ctx),
             balance: balance::zero(),
         }
     }
