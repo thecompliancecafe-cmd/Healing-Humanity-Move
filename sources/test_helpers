@@ -1,14 +1,16 @@
 module healing_humanity::test_helpers {
-    use sui::object::{UID, object};
+    use sui::object::{UID, new, object};
     use sui::tx_context::TxContext;
 
+    /// A simple mock oracle for testing purposes
     struct MockOracle has key {
         id: UID,
     }
 
+    /// Creates a new MockOracle object
     public fun create(ctx: &mut TxContext): MockOracle {
         MockOracle {
-            id: object::new(ctx),
+            id: new(ctx),
         }
     }
 }
