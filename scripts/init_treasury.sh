@@ -2,13 +2,12 @@
 set -e
 source .env
 
-echo "Initializing Treasury..."
+echo "Creating Treasury..."
 
 sui client call \
   --package $PACKAGE_ID \
   --module treasury \
-  --function init \
-  --args $GOV_CONFIG_ID \
+  --function create \
   --gas-budget 50000000 \
   --json > treasury.json
 
@@ -36,5 +35,5 @@ if ! grep -q "^TREASURY_ID=" .env; then
   echo "TREASURY_ID=$TREASURY_ID" >> .env
 fi
 
-echo "✅ Treasury initialized"
+echo "✅ Treasury created"
 echo "   Treasury: $TREASURY_ID"
