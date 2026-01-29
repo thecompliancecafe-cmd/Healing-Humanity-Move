@@ -1,86 +1,91 @@
 module healing_humanity::milestone_escrow {
-    use sui::object::{UID, ID, object};
+    use sui::object::UID;
     use sui::tx_context::TxContext;
-    use sui::coin::{Coin};
-    use sui::coin;
+    use sui::balance::{Self, Balance};
+    use sui::coin::{Self, Coin};
     use sui::transfer;
     use sui::event;
 
     /// Event: funds deposited
-    struct FundsDeposited has copy, drop {
-        vault_id: ID,
+    public struct FundsDeposited has copy, drop {
+        vault_id: UID,
         amount: u64,
     }
 
     /// Event: funds released
-    struct FundsReleased has copy, drop {
-        vault_id: ID,
-        to: address,
+    public struct FundsReleased has copy, drop {
+        vault_id: UID,
+        recipient: address,
         amount: u64,
     }
 
-    /// Escrow vault (SHARED OBJECT)
-    struct Vault<T> has key {
+    /// SHARED escrow vault (SUI only)
+    public struct Vault has key {
         id: UID,
-        campaign_id: ID,
-        balance: Coin<T>,
+        campaign_id: UID,
+        balance: Balance,
     }
 
     /// Capability required to release funds
-    struct EscrowAdminCap has key {
+    public struct EscrowAdminCap has key {
         id: UID,
     }
 
-    /// Create vault + admin cap
-    public fun create<T>(
-        campaign_id: ID,
-        initial_funds: Coin<T>,
+    /// Create vault + admin capability
+    public fun create(
+        campaign_id: UID,
         ctx: &mut TxContext
-    ): (Vault<T>, EscrowAdminCap) {
+    ): (Vault, EscrowAdminCap) {
         (
             Vault {
-                id: object::new(ctx),
+                id: sui::object::new(ctx),
                 campaign_id,
-                balance: initial_funds,
+                balance: balance::zero(),
             },
-            EscrowAdminCap { id: object::new(ctx) }
+            EscrowAdminCap {
+                id: sui::object::new(ctx),
+            }
         )
     }
 
     /// Share vault so anyone can deposit
-    public fun share<T>(vault: Vault<T>) {
+    public fun share(vault: Vault) {
         transfer::share_object(vault);
     }
 
-    /// Deposit funds into shared vault
-    public fun deposit<T>(
-        vault: &mut Vault<T>,
-        coin_in: Coin<T>
+    /// Deposit SUI into vault
+    public fun deposit(
+        vault: &mut Vault,
+        coin_in: Coin<sui::sui::SUI>
     ) {
         let amount = coin::value(&coin_in);
-        coin::merge(&mut vault.balance, coin_in);
+        balance::deposit(&mut vault.balance, coin_in);
 
         event::emit(FundsDeposited {
-            vault_id: object::id(vault),
+            vault_id: vault.id,
             amount,
         });
     }
 
     /// Release funds (ADMIN ONLY)
-    public fun release<T>(
+    public fun release(
         _: &EscrowAdminCap,
-        vault: &mut Vault<T>,
+        vault: &mut Vault,
         amount: u64,
         recipient: address,
         ctx: &mut TxContext
     ) {
-        let released = coin::split(&mut vault.balance, amount);
+        let coin_out = balance::withdraw(
+            &mut vault.balance,
+            amount,
+            ctx
+        );
 
-        transfer::transfer(released, recipient);
+        transfer::public_transfer(coin_out, recipient);
 
         event::emit(FundsReleased {
-            vault_id: object::id(vault),
-            to: recipient,
+            vault_id: vault.id,
+            recipient,
             amount,
         });
     }
