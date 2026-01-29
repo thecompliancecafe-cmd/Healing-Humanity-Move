@@ -15,6 +15,29 @@ sui client call \
   --gas-budget 50000000 \
   --json > campaign.json
 
-CAMPAIGN_ID=$(jq -r '.objectChanges[] | select(.objectType | contains("Campaign")) | .objectId' campaign.json)
+# Extract Campaign object
+CAMPAIGN_ID=$(jq -r '
+  .effects.changes[]
+  | select(
+      .type=="created"
+      and .objectType
+      | endswith("::campaign_registry::Campaign")
+    )
+  | .objectId
+' campaign.json)
 
-echo "CAMPAIGN_ID=$CAMPAIGN_ID" >> .env
+# Safety check
+if [ -z "$CAMPAIGN_ID" ]; then
+  echo "❌ Failed to create campaign"
+  exit 1
+fi
+
+# Persist to .env safely
+touch .env
+
+if ! grep -q "^CAMPAIGN_ID=" .env; then
+  echo "CAMPAIGN_ID=$CAMPAIGN_ID" >> .env
+fi
+
+echo "✅ Campaign created"
+echo "   Campaign ID: $CAMPAIGN_ID"
