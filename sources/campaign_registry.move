@@ -17,7 +17,7 @@ module healing_humanity::campaign_registry {
         ctx: &mut TxContext
     ): Campaign {
         Campaign {
-            id: sui::object::new(ctx),
+            id: UID::new(ctx),
             name,
             target_goal,
         }
