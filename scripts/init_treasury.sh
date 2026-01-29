@@ -2,19 +2,39 @@
 set -e
 source .env
 
-echo "Creating Treasury..."
-
-GAS_COIN=$(sui client gas --json | jq -r '.[0].id')
+echo "Initializing Treasury..."
 
 sui client call \
   --package $PACKAGE_ID \
   --module treasury \
-  --function create \
-  --type-args 0x2::sui::SUI \
-  --args $GAS_COIN \
+  --function init \
+  --args $GOV_CONFIG_ID \
   --gas-budget 50000000 \
   --json > treasury.json
 
-TREASURY_ID=$(jq -r '.objectChanges[] | select(.objectType | contains("Treasury")) | .objectId' treasury.json)
+# Extract Treasury object
+TREASURY_ID=$(jq -r '
+  .effects.changes[]
+  | select(
+      .type=="created"
+      and .objectType
+      | endswith("::treasury::Treasury")
+    )
+  | .objectId
+' treasury.json)
 
-echo "TREASURY_ID=$TREASURY_ID" >> .env
+# Safety check
+if [ -z "$TREASURY_ID" ]; then
+  echo "❌ Failed to extract Treasury object"
+  exit 1
+fi
+
+# Persist to .env safely
+touch .env
+
+if ! grep -q "^TREASURY_ID=" .env; then
+  echo "TREASURY_ID=$TREASURY_ID" >> .env
+fi
+
+echo "✅ Treasury initialized"
+echo "   Treasury: $TREASURY_ID"
