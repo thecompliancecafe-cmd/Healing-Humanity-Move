@@ -2,14 +2,23 @@
 set -e
 source .env
 
-echo "Funding campaign..."
+echo "Funding campaign escrow vault..."
 
-GAS_COIN=$(sui client gas --json | jq -r '.[0].id')
+# Select a SUI coin to deposit (this becomes the donation)
+SUI_COIN=$(sui client gas --json | jq -r '.[0].id')
+
+if [ -z "$SUI_COIN" ]; then
+  echo "❌ No SUI coin available to fund campaign"
+  exit 1
+fi
+
+echo "Using coin: $SUI_COIN"
 
 sui client call \
   --package $PACKAGE_ID \
   --module milestone_escrow \
   --function deposit \
-  --type-args 0x2::sui::SUI \
-  --args $VAULT_ID $GAS_COIN \
+  --args $VAULT_ID $SUI_COIN \
   --gas-budget 50000000
+
+echo "✅ Campaign funded successfully"
