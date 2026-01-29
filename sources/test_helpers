@@ -1,5 +1,5 @@
 module healing_humanity::test_helpers {
-    use sui::object::{UID, new, object};
+    use sui::object::UID;
     use sui::tx_context::TxContext;
 
     /// A simple mock oracle for testing purposes
@@ -10,7 +10,7 @@ module healing_humanity::test_helpers {
     /// Creates a new MockOracle object
     public fun create(ctx: &mut TxContext): MockOracle {
         MockOracle {
-            id: new(ctx),
+            id: UID::new(ctx),
         }
     }
 }
