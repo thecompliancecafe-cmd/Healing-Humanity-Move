@@ -12,7 +12,7 @@ sui client call \
   --json > governance.json
 
 # Extract ProtocolConfig ID (Sui 2024 format)
-GOV_CONFIG_ID=$(jq -r '
+PROTOCOL_CONFIG_ID=$(jq -r '
   .effects.changes[]
   | select(
       .type=="created"
@@ -34,7 +34,7 @@ GOV_ADMIN_CAP=$(jq -r '
 ' governance.json)
 
 # Safety checks
-if [ -z "$GOV_CONFIG_ID" ] || [ -z "$GOV_ADMIN_CAP" ]; then
+if [ -z "$PROTOCOL_CONFIG_ID" ] || [ -z "$GOV_ADMIN_CAP" ]; then
   echo "❌ Failed to extract governance objects"
   exit 1
 fi
@@ -42,8 +42,8 @@ fi
 # Persist to .env safely
 touch .env
 
-if ! grep -q "^GOV_CONFIG_ID=" .env; then
-  echo "GOV_CONFIG_ID=$GOV_CONFIG_ID" >> .env
+if ! grep -q "^PROTOCOL_CONFIG_ID=" .env; then
+  echo "PROTOCOL_CONFIG_ID=$PROTOCOL_CONFIG_ID" >> .env
 fi
 
 if ! grep -q "^GOV_ADMIN_CAP=" .env; then
@@ -51,5 +51,5 @@ if ! grep -q "^GOV_ADMIN_CAP=" .env; then
 fi
 
 echo "✅ Governance initialized"
-echo "GOV_CONFIG_ID=$GOV_CONFIG_ID"
+echo "PROTOCOL_CONFIG_ID=$PROTOCOL_CONFIG_ID"
 echo "GOV_ADMIN_CAP=$GOV_ADMIN_CAP"
