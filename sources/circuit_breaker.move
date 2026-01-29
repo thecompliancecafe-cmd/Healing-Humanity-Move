@@ -1,7 +1,8 @@
 module healing_humanity::circuit_breaker {
     use sui::object::UID;
-    use sui::tx_context::TxContext;
+    use sui::tx_context::{Self, TxContext};
     use sui::transfer;
+    use sui::event;
 
     /// Shared circuit breaker object
     public struct CircuitBreaker has key {
@@ -14,6 +15,12 @@ module healing_humanity::circuit_breaker {
         id: UID,
     }
 
+    /// Event: protocol paused
+    public struct ProtocolPaused has copy, drop {}
+
+    /// Event: protocol unpaused
+    public struct ProtocolUnpaused has copy, drop {}
+
     /// One-time package initialization
     fun init(ctx: &mut TxContext) {
         let breaker = CircuitBreaker {
@@ -25,7 +32,7 @@ module healing_humanity::circuit_breaker {
             id: UID::new(ctx),
         };
 
-        // Share the breaker so other modules can read it
+        // Share the breaker so all modules can read it
         transfer::share_object(breaker);
 
         // Give pause/unpause authority to deployer
@@ -37,7 +44,10 @@ module healing_humanity::circuit_breaker {
         _admin: &CircuitAdminCap,
         cb: &mut CircuitBreaker
     ) {
-        cb.paused = true;
+        if (!cb.paused) {
+            cb.paused = true;
+            event::emit(ProtocolPaused {});
+        }
     }
 
     /// Resume protocol operations (admin only)
@@ -45,7 +55,10 @@ module healing_humanity::circuit_breaker {
         _admin: &CircuitAdminCap,
         cb: &mut CircuitBreaker
     ) {
-        cb.paused = false;
+        if (cb.paused) {
+            cb.paused = false;
+            event::emit(ProtocolUnpaused {});
+        }
     }
 
     /// Read-only check used by other modules
