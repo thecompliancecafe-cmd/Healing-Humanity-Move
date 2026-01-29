@@ -17,7 +17,7 @@ module healing_humanity::protocol_fees {
         ctx: &mut TxContext
     ): FeeConfig {
         FeeConfig {
-            id: sui::object::new(ctx),
+            id: UID::new(ctx),
             treasury,
             fee_bps,
         }
