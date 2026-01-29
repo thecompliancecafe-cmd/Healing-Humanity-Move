@@ -1,6 +1,6 @@
 module healing_humanity::protocol_governance {
     use sui::object::UID;
-    use sui::tx_context::{Self, TxContext};
+    use sui::tx_context::TxContext;
     use sui::transfer;
     use sui::event;
 
@@ -23,8 +23,8 @@ module healing_humanity::protocol_governance {
         new_version: u64,
     }
 
-    /// One-time initialization at package publish
-    fun init(ctx: &mut TxContext) {
+    /// Initialize protocol governance (callable once)
+    public fun init(ctx: &mut TxContext): (ProtocolConfig, GovAdminCap) {
         let config = ProtocolConfig {
             id: UID::new(ctx),
             paused: false,
@@ -38,8 +38,8 @@ module healing_humanity::protocol_governance {
         // Share global protocol configuration
         transfer::share_object(config);
 
-        // Transfer governance authority to deployer
-        transfer::transfer(admin_cap, tx_context::sender(ctx));
+        // Return admin capability to caller
+        (config, admin_cap)
     }
 
     /// Emergency pause (governance only)
