@@ -8,11 +8,24 @@ sui move publish \
   --gas-budget 300000000 \
   --json > deployment.json
 
-# Extract the PACKAGE_ID from JSON
-PACKAGE_ID=$(jq -r '.effects.effects.changes[] | select(.type=="published") | .packageId' deployment.json)
+# Extract PACKAGE_ID (Sui 2024 format)
+PACKAGE_ID=$(jq -r '
+  .effects.changes[]
+  | select(.type=="published")
+  | .packageId
+' deployment.json)
 
-# Store in .env for other scripts
-echo "PACKAGE_ID=$PACKAGE_ID" > .env
+if [ -z "$PACKAGE_ID" ]; then
+  echo "❌ Failed to extract PACKAGE_ID"
+  exit 1
+fi
 
-echo "Package published successfully:"
-echo $PACKAGE_ID
+# Persist environment variables (append-safe)
+touch .env
+
+if ! grep -q "^PACKAGE_ID=" .env; then
+  echo "PACKAGE_ID=$PACKAGE_ID" >> .env
+fi
+
+echo "✅ Package published successfully"
+echo "PACKAGE_ID=$PACKAGE_ID"
