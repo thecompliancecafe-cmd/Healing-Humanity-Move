@@ -15,8 +15,8 @@ module healing_humanity::ai_oracle {
         id: UID,
     }
 
-    /// One-time initialization at package publish
-    fun init(ctx: &mut TxContext) {
+    /// Initialize oracle registry (callable once)
+    public fun init(ctx: &mut TxContext): (OracleRegistry, OracleAdminCap) {
         let registry = OracleRegistry {
             id: UID::new(ctx),
             oracles: Table::new(ctx),
@@ -29,8 +29,8 @@ module healing_humanity::ai_oracle {
         // Share registry so other modules can verify oracles
         transfer::share_object(registry);
 
-        // Give admin authority to deployer
-        transfer::transfer(admin_cap, tx_context::sender(ctx));
+        // Return admin capability to caller
+        (registry, admin_cap)
     }
 
     /// Add a new trusted oracle (admin only)
@@ -39,7 +39,9 @@ module healing_humanity::ai_oracle {
         reg: &mut OracleRegistry,
         addr: address
     ) {
-        Table::add(&mut reg.oracles, addr, true);
+        if (!Table::contains(&reg.oracles, addr)) {
+            Table::add(&mut reg.oracles, addr, true);
+        }
     }
 
     /// Read-only check used by attestation / escrow modules
