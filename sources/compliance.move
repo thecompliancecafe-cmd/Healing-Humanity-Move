@@ -1,6 +1,6 @@
 module healing_humanity::compliance {
     use sui::object::UID;
-    use sui::tx_context::TxContext;
+    use sui::tx_context::{Self, TxContext};
     use sui::table::{Self, Table};
     use sui::transfer;
 
@@ -26,10 +26,10 @@ module healing_humanity::compliance {
             id: UID::new(ctx),
         };
 
-        // Make registry publicly readable / mutable
+        // Share registry so it can be accessed globally
         transfer::share_object(registry);
 
-        // Give admin permission to deployer
+        // Transfer admin capability to deployer
         transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
@@ -39,7 +39,9 @@ module healing_humanity::compliance {
         reg: &mut ComplianceRegistry,
         addr: address
     ) {
-        Table::add(&mut reg.approved, addr, true);
+        if (!Table::contains(&reg.approved, addr)) {
+            Table::add(&mut reg.approved, addr, true);
+        }
     }
 
     /// Check if an address is compliant
