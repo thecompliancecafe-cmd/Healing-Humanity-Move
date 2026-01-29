@@ -1,6 +1,6 @@
 module healing_humanity::protocol_governance {
     use sui::object::UID;
-    use sui::tx_context::TxContext;
+    use sui::tx_context::{Self, TxContext};
     use sui::transfer;
     use sui::event;
 
@@ -11,7 +11,7 @@ module healing_humanity::protocol_governance {
         version: u64,
     }
 
-    /// Governance admin capability
+    /// Governance admin capability (owned)
     public struct GovAdminCap has key {
         id: UID,
     }
@@ -23,8 +23,8 @@ module healing_humanity::protocol_governance {
         new_version: u64,
     }
 
-    /// Initialize protocol governance (callable once)
-    public fun init(ctx: &mut TxContext): (ProtocolConfig, GovAdminCap) {
+    /// One-time initialization (called via script)
+    public fun init(ctx: &mut TxContext) {
         let config = ProtocolConfig {
             id: UID::new(ctx),
             paused: false,
@@ -38,8 +38,8 @@ module healing_humanity::protocol_governance {
         // Share global protocol configuration
         transfer::share_object(config);
 
-        // Return admin capability to caller
-        (config, admin_cap)
+        // Transfer governance authority to caller
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
     /// Emergency pause (governance only)
@@ -64,7 +64,7 @@ module healing_humanity::protocol_governance {
         }
     }
 
-    /// Upgrade version marker (used for audits & migrations)
+    /// Upgrade version marker (audits / migrations)
     public fun bump_version(
         _admin: &GovAdminCap,
         cfg: &mut ProtocolConfig
@@ -75,12 +75,32 @@ module healing_humanity::protocol_governance {
         });
     }
 
-    /// Read-only helpers for other modules
+    /// Read-only helpers
     public fun is_paused(cfg: &ProtocolConfig): bool {
         cfg.paused
     }
 
     public fun version(cfg: &ProtocolConfig): u64 {
         cfg.version
+    }
+
+    /* =========================
+       TESTING ONLY
+       ========================= */
+
+    #[test_only]
+    public fun init_for_testing(
+        ctx: &mut TxContext
+    ): (ProtocolConfig, GovAdminCap) {
+        (
+            ProtocolConfig {
+                id: UID::new(ctx),
+                paused: false,
+                version: 1,
+            },
+            GovAdminCap {
+                id: UID::new(ctx),
+            }
+        )
     }
 }
