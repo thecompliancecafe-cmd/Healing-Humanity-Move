@@ -1,6 +1,6 @@
 module healing_humanity::access_control {
     use sui::object::UID;
-    use sui::tx_context::TxContext;
+    use sui::tx_context::{Self, TxContext};
     use sui::table::{Self, Table};
     use sui::transfer;
 
@@ -18,8 +18,7 @@ module healing_humanity::access_control {
         id: UID,
     }
 
-    /// Package initialization
-    /// This runs ONCE at publish time
+    /// Package initialization (runs once at publish time)
     fun init(ctx: &mut TxContext) {
         let roles = Roles {
             id: UID::new(ctx),
@@ -33,10 +32,10 @@ module healing_humanity::access_control {
             id: UID::new(ctx),
         };
 
-        // Share the Roles object so everyone can read it
+        // Share Roles registry
         transfer::share_object(roles);
 
-        // Give AdminCap to the publisher
+        // Transfer admin capability to publisher
         transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
@@ -46,7 +45,9 @@ module healing_humanity::access_control {
         roles: &mut Roles,
         addr: address
     ) {
-        Table::add(&mut roles.oracles, addr, true);
+        if (!Table::contains(&roles.oracles, addr)) {
+            Table::add(&mut roles.oracles, addr, true);
+        }
     }
 
     /// Check if an address is an oracle
