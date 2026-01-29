@@ -18,8 +18,8 @@ module healing_humanity::access_control {
         id: UID,
     }
 
-    /// Package initialization (runs once at publish time)
-    fun init(ctx: &mut TxContext) {
+    /// Initialize access control (callable once)
+    public fun init(ctx: &mut TxContext): (Roles, AdminCap) {
         let roles = Roles {
             id: UID::new(ctx),
             oracles: Table::new(ctx),
@@ -35,8 +35,8 @@ module healing_humanity::access_control {
         // Share Roles registry
         transfer::share_object(roles);
 
-        // Transfer admin capability to publisher
-        transfer::transfer(admin_cap, tx_context::sender(ctx));
+        // Return admin cap to caller
+        (roles, admin_cap)
     }
 
     /// Add an oracle address (admin only)
