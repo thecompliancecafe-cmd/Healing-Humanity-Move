@@ -1,21 +1,28 @@
 module healing_humanity::events {
     use sui::event;
-    use std::string::String;
+    use std::string;
 
-    struct CampaignCreated has copy, drop {
-        name: String,
+    /// Emitted when a new campaign is created
+    public struct CampaignCreated has copy, drop {
+        name: string::String,
     }
 
-    struct DonationReceived has copy, drop {
-        campaign: String,
+    /// Emitted when a donation is received
+    public struct DonationReceived has copy, drop {
+        campaign: string::String,
         amount: u64,
     }
 
-    public fun campaign_created(name: String) {
+    /// Emit campaign creation event
+    public fun emit_campaign_created(name: string::String) {
         event::emit(CampaignCreated { name });
     }
 
-    public fun donation_received(campaign: String, amount: u64) {
+    /// Emit donation received event
+    public fun emit_donation_received(
+        campaign: string::String,
+        amount: u64
+    ) {
         event::emit(DonationReceived { campaign, amount });
     }
 }
