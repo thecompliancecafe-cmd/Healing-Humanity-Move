@@ -6,6 +6,12 @@ source .env
 AMOUNT=100000000
 CHARITY_ADDRESS="0xCHARITY_ADDRESS"
 
+# Safety checks
+if [ -z "$ESCROW_ADMIN_CAP" ] || [ -z "$PROTOCOL_CONFIG_ID" ] || [ -z "$VAULT_ID" ]; then
+  echo "❌ Missing required environment variables"
+  exit 1
+fi
+
 echo "Releasing funds from escrow..."
 
 sui client call \
@@ -13,8 +19,8 @@ sui client call \
   --module milestone_escrow \
   --function release \
   --args \
-    $ESCROW_ADMIN_CAP_ID \
-    $GOV_CONFIG_ID \
+    $ESCROW_ADMIN_CAP \
+    $PROTOCOL_CONFIG_ID \
     $VAULT_ID \
     $AMOUNT \
     $CHARITY_ADDRESS \
