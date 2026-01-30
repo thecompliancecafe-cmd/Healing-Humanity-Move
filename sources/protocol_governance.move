@@ -1,5 +1,6 @@
 module healing_humanity::protocol_governance {
     use sui::event;
+    use sui::transfer;
 
     /// Global protocol configuration (shared object)
     public struct ProtocolConfig has key {
@@ -20,8 +21,8 @@ module healing_humanity::protocol_governance {
         new_version: u64,
     }
 
-    /// Initialize protocol governance (callable once)
-    public fun init(ctx: &mut tx_context::TxContext): (ProtocolConfig, GovAdminCap) {
+    /// ✅ REQUIRED: internal init, returns ()
+    fun init(ctx: &mut tx_context::TxContext) {
         let config = ProtocolConfig {
             id: object::new(ctx),
             paused: false,
@@ -32,46 +33,30 @@ module healing_humanity::protocol_governance {
             id: object::new(ctx),
         };
 
-        // Share global protocol configuration
         transfer::share_object(config);
-
-        (config, admin_cap)
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
-    /// Emergency pause (governance only)
-    public fun pause(
-        _admin: &GovAdminCap,
-        cfg: &mut ProtocolConfig
-    ) {
+    /// Emergency pause
+    public fun pause(_admin: &GovAdminCap, cfg: &mut ProtocolConfig) {
         if (!cfg.paused) {
             cfg.paused = true;
             event::emit(ProtocolPaused {});
         }
     }
 
-    /// Resume protocol operations
-    public fun unpause(
-        _admin: &GovAdminCap,
-        cfg: &mut ProtocolConfig
-    ) {
+    public fun unpause(_admin: &GovAdminCap, cfg: &mut ProtocolConfig) {
         if (cfg.paused) {
             cfg.paused = false;
             event::emit(ProtocolUnpaused {});
         }
     }
 
-    /// Upgrade version marker (used for audits & migrations)
-    public fun bump_version(
-        _admin: &GovAdminCap,
-        cfg: &mut ProtocolConfig
-    ) {
+    public fun bump_version(_admin: &GovAdminCap, cfg: &mut ProtocolConfig) {
         cfg.version = cfg.version + 1;
-        event::emit(VersionBumped {
-            new_version: cfg.version,
-        });
+        event::emit(VersionBumped { new_version: cfg.version });
     }
 
-    /// Read-only helpers for other modules
     public fun is_paused(cfg: &ProtocolConfig): bool {
         cfg.paused
     }
