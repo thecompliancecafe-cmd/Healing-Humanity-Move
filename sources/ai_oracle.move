@@ -1,34 +1,37 @@
 module healing_humanity::ai_oracle {
 
-    use sui::table;
+    use sui::object::{UID};
+    use sui::tx_context::TxContext;
     use sui::table::Table;
+    use sui::transfer;
 
     /// Registry holding approved oracle addresses
     public struct OracleRegistry has key {
-        id: sui::object::UID,
+        id: UID,
         oracles: Table<address, bool>,
     }
 
-    /// Admin capability for managing oracles
+    /// Admin capability
     public struct OracleAdminCap has key {
-        id: sui::object::UID,
+        id: UID,
     }
 
-    /// Create oracle registry
-    public fun create(
-        ctx: &mut sui::tx_context::TxContext
-    ): (OracleRegistry, OracleAdminCap) {
+    /// Initialize oracle registry (shared object)
+    public fun init(ctx: &mut TxContext): OracleAdminCap {
         let registry = OracleRegistry {
             id: sui::object::new(ctx),
-            oracles: table::new(ctx),
+            oracles: Table::new(ctx),
         };
 
         let cap = OracleAdminCap {
             id: sui::object::new(ctx),
         };
 
-        sui::transfer::share_object(registry);
-        (registry, cap)
+        // Share registry globally
+        transfer::share_object(registry);
+
+        // ONLY return admin cap
+        cap
     }
 
     /// Add a new oracle
@@ -37,16 +40,19 @@ module healing_humanity::ai_oracle {
         registry: &mut OracleRegistry,
         oracle: address
     ) {
-        if (!table::contains(&registry.oracles, oracle)) {
-            table::add(&mut registry.oracles, oracle, true);
-        }
+        assert!(
+            !Table::contains(&registry.oracles, oracle),
+            0
+        );
+
+        Table::add(&mut registry.oracles, oracle, true);
     }
 
-    /// Check if address is an approved oracle
+    /// Check if address is oracle
     public fun is_oracle(
         registry: &OracleRegistry,
         oracle: address
     ): bool {
-        table::contains(&registry.oracles, oracle)
+        Table::contains(&registry.oracles, oracle)
     }
 }
