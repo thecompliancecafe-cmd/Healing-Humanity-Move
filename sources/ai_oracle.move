@@ -1,42 +1,37 @@
 module healing_humanity::ai_oracle {
 
-    use sui::object::{Self, UID};
-    use sui::tx_context::TxContext;
-    use sui::table::{Self, Table};
-    use sui::transfer;
+    use sui::table;
+    use sui::table::Table;
 
-    /// Registry of approved oracle addresses
+    /// Registry holding approved oracle addresses
     public struct OracleRegistry has key {
-        id: UID,
+        id: sui::object::UID,
         oracles: Table<address, bool>,
     }
 
-    /// Capability to manage oracle registry
+    /// Admin capability for managing oracles
     public struct OracleAdminCap has key {
-        id: UID,
+        id: sui::object::UID,
     }
 
-    /// Create registry + admin capability
-    /// NOTE: This is NOT an `init` function (those are special in Sui)
+    /// Create oracle registry
     public fun create(
-        ctx: &mut TxContext
+        ctx: &mut sui::tx_context::TxContext
     ): (OracleRegistry, OracleAdminCap) {
         let registry = OracleRegistry {
-            id: object::new(ctx),
+            id: sui::object::new(ctx),
             oracles: table::new(ctx),
         };
 
         let cap = OracleAdminCap {
-            id: object::new(ctx),
+            id: sui::object::new(ctx),
         };
 
-        // Registry should be shared
-        transfer::share_object(registry);
-
+        sui::transfer::share_object(registry);
         (registry, cap)
     }
 
-    /// Add a new oracle address
+    /// Add a new oracle
     public fun add_oracle(
         _cap: &OracleAdminCap,
         registry: &mut OracleRegistry,
@@ -47,7 +42,7 @@ module healing_humanity::ai_oracle {
         }
     }
 
-    /// Check if an address is a valid oracle
+    /// Check if address is an approved oracle
     public fun is_oracle(
         registry: &OracleRegistry,
         oracle: address
