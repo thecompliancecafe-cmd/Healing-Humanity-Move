@@ -1,18 +1,15 @@
 module healing_humanity::circuit_breaker {
-    use sui::object::UID;
-    use sui::tx_context::TxContext;
-    use sui::transfer;
     use sui::event;
 
     /// Shared circuit breaker object
     public struct CircuitBreaker has key {
-        id: UID,
+        id: object::UID,
         paused: bool,
     }
 
     /// Admin capability for pause control
     public struct CircuitAdminCap has key {
-        id: UID,
+        id: object::UID,
     }
 
     /// Event: protocol paused
@@ -21,22 +18,23 @@ module healing_humanity::circuit_breaker {
     /// Event: protocol unpaused
     public struct ProtocolUnpaused has copy, drop {}
 
-    /// Initialize circuit breaker (callable once)
-    public fun init(ctx: &mut TxContext): (CircuitBreaker, CircuitAdminCap) {
+    /// One-time package initialization (runs at publish)
+    /// NOTE: init must be internal and return ()
+    fun init(ctx: &mut tx_context::TxContext) {
         let breaker = CircuitBreaker {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             paused: false,
         };
 
         let admin_cap = CircuitAdminCap {
-            id: UID::new(ctx),
+            id: object::new(ctx),
         };
 
         // Share the breaker so all modules can read it
         transfer::share_object(breaker);
 
-        // Return admin capability to caller
-        (breaker, admin_cap)
+        // Give pause/unpause authority to deployer
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
     /// Pause protocol operations (admin only)
