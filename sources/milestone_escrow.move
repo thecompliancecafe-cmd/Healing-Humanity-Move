@@ -1,6 +1,10 @@
 module healing_humanity::milestone_escrow {
 
+    use sui::object::{UID, ID};
+    use sui::tx_context::TxContext;
+
     use sui::balance;
+    use sui::coin;
     use sui::coin::Coin;
     use sui::sui::SUI;
     use sui::transfer;
