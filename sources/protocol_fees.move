@@ -1,11 +1,11 @@
 module healing_humanity::protocol_fees {
-    use sui::object::UID;
+    use sui::object;
     use sui::tx_context::TxContext;
 
     /// Protocol fee configuration
     /// fee_bps = fee in basis points (1% = 100 bps)
     public struct FeeConfig has key {
-        id: UID,
+        id: object::UID,
         treasury: address,
         fee_bps: u64,
     }
@@ -17,7 +17,7 @@ module healing_humanity::protocol_fees {
         ctx: &mut TxContext
     ): FeeConfig {
         FeeConfig {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             treasury,
             fee_bps,
         }
