@@ -1,13 +1,11 @@
 module healing_humanity::hypercerts {
-    use sui::object::{UID, ID};
-    use sui::tx_context::TxContext;
     use std::string::String;
 
     /// Hypercert NFT — proof of impact / donation
     public struct Hypercert has key {
-        id: UID,
+        id: object::UID,
         donor: address,
-        campaign_id: ID,
+        campaign_id: object::ID,
         metadata: String,
     }
 
@@ -15,12 +13,12 @@ module healing_humanity::hypercerts {
     /// Currently permissionless (can be gated later)
     public fun mint(
         donor: address,
-        campaign_id: ID,
+        campaign_id: object::ID,
         metadata: String,
-        ctx: &mut TxContext
+        ctx: &mut tx_context::TxContext
     ): Hypercert {
         Hypercert {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             donor,
             campaign_id,
             metadata,
