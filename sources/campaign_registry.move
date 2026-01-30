@@ -1,7 +1,8 @@
 module healing_humanity::campaign_registry {
 
     use sui::object::{UID, ID};
-    use sui::table::{self, Table};
+    use sui::table;
+    use sui::table::Table;
     use sui::transfer;
 
     /// Registry of campaigns
@@ -24,7 +25,6 @@ module healing_humanity::campaign_registry {
             campaigns: table::new(ctx),
         };
 
-        // Share the registry
         transfer::share_object(registry);
         registry
     }
