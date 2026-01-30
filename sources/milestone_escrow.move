@@ -1,64 +1,58 @@
 module healing_humanity::milestone_escrow {
 
-    use sui::object;
     use sui::object::{UID, ID};
     use sui::tx_context::TxContext;
-
-    use sui::coin;
     use sui::coin::Coin;
-
-    use sui::balance;
     use sui::balance::Balance;
+    use sui::sui::SUI;
 
-    use sui::transfer;
-
-    /// Escrow vault holding funds for a campaign
+    /// Escrow vault holding campaign funds
     public struct Vault has key {
         id: UID,
         campaign_id: ID,
-        balance: Balance<sui::sui::SUI>,
+        balance: Balance<SUI>,
     }
 
-    /// Capability allowing release of funds
+    /// Capability to authorize releases
     public struct EscrowCap has key {
         id: UID,
         campaign_id: ID,
     }
 
-    /// Create escrow vault and cap
-    /// NOTE: vault is shared here (tests must NOT share it)
+    /// Create a new escrow vault for a campaign
+    /// Vault is shared INSIDE this function (correct pattern)
     public fun create(
         campaign_id: ID,
-        initial_coin: Coin<sui::sui::SUI>,
+        initial_coin: Coin<SUI>,
         ctx: &mut TxContext
     ): (Vault, EscrowCap) {
 
-        let bal = coin::into_balance(initial_coin);
+        let balance = sui::coin::into_balance(initial_coin);
 
         let vault = Vault {
-            id: object::new(ctx),
+            id: sui::object::new(ctx),
             campaign_id,
-            balance: bal,
+            balance,
         };
 
         let cap = EscrowCap {
-            id: object::new(ctx),
+            id: sui::object::new(ctx),
             campaign_id,
         };
 
-        // ✅ MUST be done inside this module
-        transfer::share_object(vault);
+        // Share vault here (allowed)
+        sui::transfer::share_object(vault);
 
         (vault, cap)
     }
 
-    /// Deposit more funds into escrow
+    /// Deposit additional funds into escrow
     public fun deposit(
         vault: &mut Vault,
-        coin_in: Coin<sui::sui::SUI>
+        coin: Coin<SUI>
     ) {
-        let bal = coin::into_balance(coin_in);
-        balance::join(&mut vault.balance, bal);
+        let bal = sui::coin::into_balance(coin);
+        sui::balance::join(&mut vault.balance, bal);
     }
 
     /// Release funds to recipient
@@ -69,15 +63,13 @@ module healing_humanity::milestone_escrow {
         recipient: address,
         ctx: &mut TxContext
     ) {
-        // Authorization check
+        // Ensure correct campaign
         assert!(cap.campaign_id == vault.campaign_id, 0);
 
-        let bal_out = balance::split(&mut vault.balance, amount);
+        let bal_out = sui::balance::split(&mut vault.balance, amount);
+        let coin_out = sui::coin::from_balance(bal_out, ctx);
 
-        let coin_out: Coin<sui::sui::SUI> =
-            coin::from_balance(bal_out, ctx);
-
-        // ✅ public transfer (allowed)
-        transfer::public_transfer(coin_out, recipient);
+        // Public transfer (allowed)
+        sui::transfer::public_transfer(coin_out, recipient);
     }
 }
