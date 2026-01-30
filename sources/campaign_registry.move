@@ -1,5 +1,5 @@
 module healing_humanity::campaign_registry {
-    use sui::object::UID;
+    use sui::object::{self, UID};
     use sui::tx_context::TxContext;
     use std::string;
 
@@ -17,7 +17,7 @@ module healing_humanity::campaign_registry {
         ctx: &mut TxContext
     ): Campaign {
         Campaign {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             name,
             target_goal,
         }
