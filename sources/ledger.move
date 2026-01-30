@@ -16,7 +16,7 @@ module healing_humanity::ledger {
         ctx: &mut TxContext
     ): LedgerEntry {
         LedgerEntry {
-            id: object::new(ctx),
+            id: sui::object::new(ctx),
             campaign_id,
             donor,
             amount,
