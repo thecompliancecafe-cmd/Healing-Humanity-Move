@@ -2,31 +2,31 @@ module healing_humanity::milestone_escrow {
 
     use sui::object::{Self, UID, ID};
     use sui::tx_context::TxContext;
-    use sui::coin::{Coin};
+    use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance};
     use sui::sui::SUI;
     use sui::transfer;
 
-    /// Vault holding escrowed funds for a campaign
+    use healing_humanity::protocol_governance;
+
+    /// Vault holding escrowed funds
     public struct Vault has key {
         id: UID,
         campaign_id: ID,
         balance: Balance<SUI>,
     }
 
-    /// Capability that allows releasing funds
+    /// Capability to release funds
     public struct EscrowCap has key {
         id: UID,
         campaign_id: ID,
     }
 
     /// Create a new escrow vault for a campaign
-    /// The vault is shared inside this module (required by Sui)
     public fun create(
         campaign_id: ID,
         ctx: &mut TxContext
     ): (Vault, EscrowCap) {
-
         let vault = Vault {
             id: object::new(ctx),
             campaign_id,
@@ -38,31 +38,45 @@ module healing_humanity::milestone_escrow {
             campaign_id,
         };
 
-        // Vault must be shared from inside its defining module
+        // Vault must be shared
         transfer::share_object(vault);
 
         (vault, cap)
     }
 
-    /// Deposit SUI into the escrow vault
+    /// Deposit funds into escrow
     public fun deposit(
         vault: &mut Vault,
-        coin: Coin<SUI>
+        coin_in: Coin<SUI>
     ) {
-        let bal = balance::from_coin(coin);
+        let bal = coin::into_balance(coin_in);
         balance::join(&mut vault.balance, bal);
     }
 
-    /// Release funds to a recipient
+    /// Release funds from escrow
     public fun release(
-        _cap: &EscrowCap,
+        cap: &EscrowCap,
+        cfg: &protocol_governance::ProtocolConfig,
         vault: &mut Vault,
         amount: u64,
         recipient: address,
         ctx: &mut TxContext
     ) {
-        let bal = balance::split(&mut vault.balance, amount);
-        let coin = balance::to_coin(bal, ctx);
-        transfer::public_transfer(coin, recipient);
+        // governance pause check
+        assert!(
+            !protocol_governance::is_paused(cfg),
+            0
+        );
+
+        // ensure cap matches vault
+        assert!(
+            cap.campaign_id == vault.campaign_id,
+            1
+        );
+
+        let bal_out = balance::split(&mut vault.balance, amount);
+        let coin_out = coin::from_balance(bal_out, ctx);
+
+        transfer::transfer(coin_out, recipient);
     }
 }
