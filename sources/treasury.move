@@ -1,32 +1,40 @@
 module healing_humanity::treasury {
-    use sui::balance::{Self, Balance};
-    use sui::coin::{Self, Coin};
-    use sui::sui::SUI;
 
-    /// Treasury vault holding protocol funds (SUI)
+    use sui::object::{Self, UID};
+    use sui::tx_context::TxContext;
+    use sui::coin::Coin;
+    use sui::balance::{Self, Balance};
+    use sui::sui::SUI;
+    use sui::transfer;
+
+    /// Shared treasury holding protocol funds
     public struct Treasury has key {
         id: UID,
         balance: Balance<SUI>,
     }
 
-    /// Create an empty treasury
+    /// Create and share the treasury
     public fun create(ctx: &mut TxContext): Treasury {
-        Treasury {
+        let treasury = Treasury {
             id: object::new(ctx),
             balance: balance::zero<SUI>(),
-        }
+        };
+
+        // Treasury must be shared from inside its module
+        transfer::share_object(treasury);
+        treasury
     }
 
-    /// Deposit SUI into treasury
+    /// Deposit SUI into the treasury
     public fun deposit(
         treasury: &mut Treasury,
-        coin_in: Coin<SUI>
+        coin: Coin<SUI>
     ) {
-        let bal = coin::into_balance(coin_in);
+        let bal = balance::from_coin(coin);
         balance::join(&mut treasury.balance, bal);
     }
 
-    /// Withdraw SUI from treasury
+    /// Withdraw SUI from the treasury
     public fun withdraw(
         treasury: &mut Treasury,
         amount: u64,
@@ -34,7 +42,7 @@ module healing_humanity::treasury {
         ctx: &mut TxContext
     ) {
         let bal = balance::split(&mut treasury.balance, amount);
-        let coin_out = coin::from_balance(bal, ctx);
-        transfer::public_transfer(coin_out, recipient);
+        let coin = balance::to_coin(bal, ctx);
+        transfer::public_transfer(coin, recipient);
     }
 }
