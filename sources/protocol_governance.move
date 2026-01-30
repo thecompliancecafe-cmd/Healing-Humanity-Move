@@ -1,6 +1,6 @@
 module healing_humanity::protocol_governance {
-    use sui::object::UID;
-    use sui::tx_context::{Self, TxContext};
+    use sui::object::{self, UID};
+    use sui::tx_context::TxContext;
     use sui::transfer;
     use sui::event;
 
@@ -23,22 +23,22 @@ module healing_humanity::protocol_governance {
         new_version: u64,
     }
 
-    /// One-time initialization (called via script)
-    public fun init(ctx: &mut TxContext) {
+    /// Module initializer (runs ONCE at publish time)
+    fun init(ctx: &mut TxContext) {
         let config = ProtocolConfig {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             paused: false,
             version: 1,
         };
 
         let admin_cap = GovAdminCap {
-            id: UID::new(ctx),
+            id: object::new(ctx),
         };
 
         // Share global protocol configuration
         transfer::share_object(config);
 
-        // Transfer governance authority to caller
+        // Transfer governance authority to publisher
         transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
@@ -64,7 +64,7 @@ module healing_humanity::protocol_governance {
         }
     }
 
-    /// Upgrade version marker (audits / migrations)
+    /// Upgrade version marker
     public fun bump_version(
         _admin: &GovAdminCap,
         cfg: &mut ProtocolConfig
@@ -94,12 +94,12 @@ module healing_humanity::protocol_governance {
     ): (ProtocolConfig, GovAdminCap) {
         (
             ProtocolConfig {
-                id: UID::new(ctx),
+                id: object::new(ctx),
                 paused: false,
                 version: 1,
             },
             GovAdminCap {
-                id: UID::new(ctx),
+                id: object::new(ctx),
             }
         )
     }
