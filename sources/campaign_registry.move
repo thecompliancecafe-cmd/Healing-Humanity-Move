@@ -1,8 +1,9 @@
 module healing_humanity::campaign_registry {
 
-    use sui::object::{Self, UID, ID};
+    use sui::object;
+    use sui::object::{UID, ID};
     use sui::tx_context::TxContext;
-    use sui::table::{Self, Table};
+    use sui::table::{self, Table};
     use sui::transfer;
 
     /// Registry of campaigns
@@ -11,12 +12,12 @@ module healing_humanity::campaign_registry {
         campaigns: Table<ID, address>, // campaign_id -> owner
     }
 
-    /// Capability to manage registry
+    /// Capability to manage the registry
     public struct CampaignAdminCap has key {
         id: UID,
     }
 
-    /// Create registry and admin capability
+    /// Create the campaign registry and admin capability
     public fun create(
         ctx: &mut TxContext
     ): (CampaignRegistry, CampaignAdminCap) {
@@ -50,7 +51,7 @@ module healing_humanity::campaign_registry {
         table::add(&mut registry.campaigns, campaign_id, owner);
     }
 
-    /// Check campaign owner
+    /// Get the owner of a campaign
     public fun owner_of(
         registry: &CampaignRegistry,
         campaign_id: ID
@@ -58,7 +59,7 @@ module healing_humanity::campaign_registry {
         *table::borrow(&registry.campaigns, campaign_id)
     }
 
-    /// Check if campaign exists
+    /// Check whether a campaign exists
     public fun exists(
         registry: &CampaignRegistry,
         campaign_id: ID
