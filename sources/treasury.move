@@ -1,10 +1,7 @@
 module healing_humanity::treasury {
-    use sui::object::UID;
-    use sui::tx_context::TxContext;
     use sui::balance::{Self, Balance};
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
-    use sui::transfer;
 
     /// Treasury vault holding protocol funds (SUI)
     public struct Treasury has key {
@@ -15,7 +12,7 @@ module healing_humanity::treasury {
     /// Create an empty treasury
     public fun create(ctx: &mut TxContext): Treasury {
         Treasury {
-            id: sui::object::new(ctx),
+            id: object::new(ctx),
             balance: balance::zero<SUI>(),
         }
     }
