@@ -1,36 +1,33 @@
 module healing_humanity::compliance {
-    use sui::object::UID;
-    use sui::tx_context::TxContext;
-    use sui::table::Table;
-    use sui::transfer;
 
     /// Shared compliance registry
     public struct ComplianceRegistry has key {
-        id: UID,
-        approved: Table<address, bool>,
+        id: object::UID,
+        approved: table::Table<address, bool>,
     }
 
     /// Admin capability for compliance approvals
     public struct ComplianceAdminCap has key {
-        id: UID,
+        id: object::UID,
     }
 
-    /// Initialize compliance registry (callable once)
-    public fun init(ctx: &mut TxContext): (ComplianceRegistry, ComplianceAdminCap) {
+    /// Package initialization (runs once at publish)
+    /// NOTE: init must be internal and return ()
+    fun init(ctx: &mut tx_context::TxContext) {
         let registry = ComplianceRegistry {
-            id: UID::new(ctx),
-            approved: Table::new(ctx),
+            id: object::new(ctx),
+            approved: table::new(ctx),
         };
 
         let admin_cap = ComplianceAdminCap {
-            id: UID::new(ctx),
+            id: object::new(ctx),
         };
 
-        // Share registry so it can be accessed globally
+        // Share registry globally
         transfer::share_object(registry);
 
-        // Return admin capability to caller
-        (registry, admin_cap)
+        // Transfer admin cap to deployer
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
     /// Approve an address as compliant (admin only)
@@ -39,8 +36,8 @@ module healing_humanity::compliance {
         reg: &mut ComplianceRegistry,
         addr: address
     ) {
-        if (!Table::contains(&reg.approved, addr)) {
-            Table::add(&mut reg.approved, addr, true);
+        if (!table::contains(&reg.approved, addr)) {
+            table::add(&mut reg.approved, addr, true);
         }
     }
 
@@ -49,6 +46,6 @@ module healing_humanity::compliance {
         reg: &ComplianceRegistry,
         addr: address
     ): bool {
-        Table::contains(&reg.approved, addr)
+        table::contains(&reg.approved, addr)
     }
 }
