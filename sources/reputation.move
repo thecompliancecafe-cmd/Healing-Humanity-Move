@@ -1,11 +1,11 @@
 module healing_humanity::reputation {
-    use sui::object::{self, UID};
-    use sui::tx_context::TxContext;
+    use sui::object;
+    use sui::tx_context;
 
     /// Soulbound reputation / XP object
     /// Non-transferable by design
     public struct XP has key {
-        id: UID,
+        id: object::UID,
         owner: address,
         xp: u64,
     }
@@ -15,7 +15,7 @@ module healing_humanity::reputation {
     public fun award(
         owner: address,
         xp: u64,
-        ctx: &mut TxContext
+        ctx: &mut tx_context::TxContext
     ): XP {
         XP {
             id: object::new(ctx),
