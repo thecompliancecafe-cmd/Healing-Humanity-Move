@@ -1,93 +1,67 @@
 module healing_humanity::milestone_escrow {
-    use sui::object::{self, UID, ID};
-    use sui::tx_context::TxContext;
-    use sui::balance::Balance;
-    use sui::coin::Coin;
+    use sui::balance;
+    use sui::coin::{self, Coin};
     use sui::sui::SUI;
     use sui::transfer;
-    use sui::event;
 
-    use healing_humanity::protocol_governance::{self, ProtocolConfig};
+    use healing_humanity::protocol_governance::ProtocolConfig;
 
-    /// Event: funds deposited
-    public struct FundsDeposited has copy, drop {
-        vault_id: ID,
-        amount: u64,
-    }
-
-    /// Event: funds released
-    public struct FundsReleased has copy, drop {
-        vault_id: ID,
-        recipient: address,
-        amount: u64,
-    }
-
-    /// SHARED escrow vault (SUI only)
+    /// Escrow vault holding donated funds
     public struct Vault has key {
-        id: UID,
-        campaign_id: ID,
-        balance: Balance<SUI>,
+        id: object::UID,
+        campaign_id: object::ID,
+        balance: balance::Balance<SUI>,
     }
 
-    /// Capability required to release funds
+    /// Admin capability for releasing funds
     public struct EscrowAdminCap has key {
-        id: UID,
+        id: object::UID,
     }
 
-    /// Create vault + admin capability
+    /// Create escrow vault
     public fun create(
-        campaign_id: ID,
-        ctx: &mut TxContext
+        campaign_id: object::ID,
+        initial_coin: Coin<SUI>,
+        ctx: &mut tx_context::TxContext
     ): (Vault, EscrowAdminCap) {
-        (
-            Vault {
-                id: object::new(ctx),
-                campaign_id,
-                balance: Balance::zero(),
-            },
-            EscrowAdminCap {
-                id: object::new(ctx),
-            }
-        )
+        let bal = coin::into_balance(initial_coin);
+
+        let vault = Vault {
+            id: object::new(ctx),
+            campaign_id,
+            balance: bal,
+        };
+
+        let cap = EscrowAdminCap {
+            id: object::new(ctx),
+        };
+
+        (vault, cap)
     }
 
-    /// Share vault so anyone can deposit
-    public fun share(vault: Vault) {
-        transfer::share_object(vault);
-    }
-
-    /// Deposit SUI into vault (permissionless)
+    /// Deposit funds into shared vault
     public fun deposit(
         vault: &mut Vault,
         coin_in: Coin<SUI>
     ) {
-        let amount = coin_in.value();
-        vault.balance.join(coin_in);
-
-        event::emit(FundsDeposited {
-            vault_id: object::id(vault),
-            amount,
-        });
+        let bal = coin::into_balance(coin_in);
+        balance::join(&mut vault.balance, bal);
     }
 
-    /// Release funds (ADMIN ONLY, protocol must be active)
+    /// Release funds to recipient (governance-controlled)
     public fun release(
-        _admin: &EscrowAdminCap,
+        _cap: &EscrowAdminCap,
         cfg: &ProtocolConfig,
         vault: &mut Vault,
         amount: u64,
-        recipient: address
+        recipient: address,
+        ctx: &mut tx_context::TxContext
     ) {
-        // Governance safety check
         assert!(!protocol_governance::is_paused(cfg), 0);
 
-        let coin_out = vault.balance.split(amount);
-        transfer::public_transfer(coin_out, recipient);
+        let bal_out = balance::split(&mut vault.balance, amount);
+        let coin_out = coin::from_balance(bal_out, ctx);
 
-        event::emit(FundsReleased {
-            vault_id: object::id(vault),
-            recipient,
-            amount,
-        });
+        transfer::public_transfer(coin_out, recipient);
     }
 }
