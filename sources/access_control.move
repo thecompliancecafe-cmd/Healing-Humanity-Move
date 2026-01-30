@@ -1,60 +1,115 @@
 module healing_humanity::access_control {
-    use sui::object::UID;
-    use sui::tx_context::{Self, TxContext};
-    use sui::table::{Self, Table};
+    use sui::table;
     use sui::transfer;
 
-    /// Main role registry object (shared)
+    /// Shared roles registry
     public struct Roles has key {
-        id: UID,
-        oracles: Table<address, bool>,
-        compliance: Table<address, bool>,
-        auditors: Table<address, bool>,
-        treasury_signers: Table<address, bool>,
+        id: object::UID,
+        oracles: table::Table<address, bool>,
+        compliance: table::Table<address, bool>,
+        auditors: table::Table<address, bool>,
+        treasury_signers: table::Table<address, bool>,
     }
 
-    /// Admin capability (owned)
+    /// Admin capability
     public struct AdminCap has key {
-        id: UID,
+        id: object::UID,
     }
 
-    /// Initialize access control (callable once)
-    public fun init(ctx: &mut TxContext): (Roles, AdminCap) {
+    /// Initialize access control (called once at publish)
+    fun init(ctx: &mut tx_context::TxContext) {
         let roles = Roles {
-            id: UID::new(ctx),
-            oracles: Table::new(ctx),
-            compliance: Table::new(ctx),
-            auditors: Table::new(ctx),
-            treasury_signers: Table::new(ctx),
+            id: object::new(ctx),
+            oracles: table::new(ctx),
+            compliance: table::new(ctx),
+            auditors: table::new(ctx),
+            treasury_signers: table::new(ctx),
         };
 
-        let admin_cap = AdminCap {
-            id: UID::new(ctx),
+        let admin = AdminCap {
+            id: object::new(ctx),
         };
 
-        // Share Roles registry
+        // Share roles registry
         transfer::share_object(roles);
 
-        // Return admin cap to caller
-        (roles, admin_cap)
+        // Give admin cap to deployer
+        transfer::transfer(admin, tx_context::sender(ctx));
     }
 
-    /// Add an oracle address (admin only)
+    /// ---- ORACLES ----
+
     public fun add_oracle(
         _admin: &AdminCap,
         roles: &mut Roles,
         addr: address
     ) {
-        if (!Table::contains(&roles.oracles, addr)) {
-            Table::add(&mut roles.oracles, addr, true);
+        if (!table::contains(&roles.oracles, addr)) {
+            table::add(&mut roles.oracles, addr, true);
         }
     }
 
-    /// Check if an address is an oracle
     public fun is_oracle(
         roles: &Roles,
         addr: address
     ): bool {
-        Table::contains(&roles.oracles, addr)
+        table::contains(&roles.oracles, addr)
+    }
+
+    /// ---- COMPLIANCE ----
+
+    public fun add_compliance(
+        _admin: &AdminCap,
+        roles: &mut Roles,
+        addr: address
+    ) {
+        if (!table::contains(&roles.compliance, addr)) {
+            table::add(&mut roles.compliance, addr, true);
+        }
+    }
+
+    public fun is_compliance(
+        roles: &Roles,
+        addr: address
+    ): bool {
+        table::contains(&roles.compliance, addr)
+    }
+
+    /// ---- AUDITORS ----
+
+    public fun add_auditor(
+        _admin: &AdminCap,
+        roles: &mut Roles,
+        addr: address
+    ) {
+        if (!table::contains(&roles.auditors, addr)) {
+            table::add(&mut roles.auditors, addr, true);
+        }
+    }
+
+    public fun is_auditor(
+        roles: &Roles,
+        addr: address
+    ): bool {
+        table::contains(&roles.auditors, addr)
+    }
+
+    /// ---- TREASURY SIGNERS ----
+
+    public fun add_treasury_signer(
+        _admin: &AdminCap,
+        roles: &mut Roles,
+        addr: address
+    ) {
+        if (!table::contains(&roles.treasury_signers, addr)) {
+            table::add(&mut roles.treasury_signers, addr, true);
+        }
+    }
+
+    public fun is_treasury_signer(
+        roles: &Roles,
+        addr: address
+    ): bool {
+        table::contains(&roles.treasury_signers, addr)
     }
 }
