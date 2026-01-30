@@ -1,19 +1,16 @@
 module healing_humanity::protocol_governance {
-    use sui::object::{self, UID};
-    use sui::tx_context::TxContext;
-    use sui::transfer;
     use sui::event;
 
     /// Global protocol configuration (shared object)
     public struct ProtocolConfig has key {
-        id: UID,
+        id: object::UID,
         paused: bool,
         version: u64,
     }
 
-    /// Governance admin capability (owned)
+    /// Governance admin capability
     public struct GovAdminCap has key {
-        id: UID,
+        id: object::UID,
     }
 
     /// Governance events
@@ -23,8 +20,8 @@ module healing_humanity::protocol_governance {
         new_version: u64,
     }
 
-    /// Module initializer (runs ONCE at publish time)
-    fun init(ctx: &mut TxContext) {
+    /// Initialize protocol governance (callable once)
+    public fun init(ctx: &mut tx_context::TxContext): (ProtocolConfig, GovAdminCap) {
         let config = ProtocolConfig {
             id: object::new(ctx),
             paused: false,
@@ -38,8 +35,7 @@ module healing_humanity::protocol_governance {
         // Share global protocol configuration
         transfer::share_object(config);
 
-        // Transfer governance authority to publisher
-        transfer::transfer(admin_cap, tx_context::sender(ctx));
+        (config, admin_cap)
     }
 
     /// Emergency pause (governance only)
@@ -64,7 +60,7 @@ module healing_humanity::protocol_governance {
         }
     }
 
-    /// Upgrade version marker
+    /// Upgrade version marker (used for audits & migrations)
     public fun bump_version(
         _admin: &GovAdminCap,
         cfg: &mut ProtocolConfig
@@ -75,32 +71,12 @@ module healing_humanity::protocol_governance {
         });
     }
 
-    /// Read-only helpers
+    /// Read-only helpers for other modules
     public fun is_paused(cfg: &ProtocolConfig): bool {
         cfg.paused
     }
 
     public fun version(cfg: &ProtocolConfig): u64 {
         cfg.version
-    }
-
-    /* =========================
-       TESTING ONLY
-       ========================= */
-
-    #[test_only]
-    public fun init_for_testing(
-        ctx: &mut TxContext
-    ): (ProtocolConfig, GovAdminCap) {
-        (
-            ProtocolConfig {
-                id: object::new(ctx),
-                paused: false,
-                version: 1,
-            },
-            GovAdminCap {
-                id: object::new(ctx),
-            }
-        )
     }
 }
