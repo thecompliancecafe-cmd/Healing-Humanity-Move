@@ -1,5 +1,5 @@
 module healing_humanity::reputation {
-    use sui::object::UID;
+    use sui::object::{self, UID};
     use sui::tx_context::TxContext;
 
     /// Soulbound reputation / XP object
@@ -18,7 +18,7 @@ module healing_humanity::reputation {
         ctx: &mut TxContext
     ): XP {
         XP {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             owner,
             xp,
         }
