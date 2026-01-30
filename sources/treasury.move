@@ -1,60 +1,42 @@
-module healing_humanity::milestone_escrow_tests {
-    use sui::test_scenario;
-    use sui::coin::Coin;
+module healing_humanity::treasury {
+    use sui::object;
+    use sui::balance::{Balance};
+    use sui::coin::{Coin};
     use sui::sui::SUI;
+    use sui::tx_context::TxContext;
     use sui::transfer;
 
-    use healing_humanity::milestone_escrow;
-    use healing_humanity::protocol_governance;
+    /// Treasury vault holding protocol funds (SUI)
+    public struct Treasury has key {
+        id: object::UID,
+        balance: Balance<SUI>,
+    }
 
-    #[test]
-    fun test_deposit_and_release() {
-        let mut scenario = test_scenario::begin(@0xA);
-        let ctx = test_scenario::ctx(&mut scenario);
+    /// Create an empty treasury
+    public fun create(ctx: &mut TxContext): Treasury {
+        Treasury {
+            id: object::new(ctx),
+            balance: Balance::zero<SUI>(),
+        }
+    }
 
-        /* ---------------- Governance ---------------- */
+    /// Deposit SUI into treasury
+    public fun deposit(
+        treasury: &mut Treasury,
+        coin_in: Coin<SUI>,
+    ) {
+        treasury.balance.join(coin::into_balance(coin_in));
+    }
 
-        let (mut cfg, gov_cap) =
-            protocol_governance::init_for_testing(ctx);
-
-        /* ---------------- Campaign ---------------- */
-
-        let campaign_uid = sui::object::new(ctx);
-        let campaign_id = sui::object::uid_to_inner(&campaign_uid);
-
-        /* ---------------- Escrow ---------------- */
-
-        let (vault, escrow_cap) =
-            milestone_escrow::create(campaign_id, ctx);
-
-        transfer::share_object(vault);
-
-        let vault_ref =
-            test_scenario::borrow_shared_mut<
-                milestone_escrow::Vault
-            >(&mut scenario);
-
-        /* ---------------- Deposit ---------------- */
-
-        let deposit_coin: Coin<SUI> =
-            test_scenario::take_from_sender(&mut scenario);
-
-        milestone_escrow::deposit(
-            vault_ref,
-            deposit_coin
-        );
-
-        /* ---------------- Release ---------------- */
-
-        milestone_escrow::release(
-            &escrow_cap,
-            &cfg,
-            vault_ref,
-            1,
-            @0xB,
-            ctx
-        );
-
-        test_scenario::end(scenario);
+    /// Withdraw SUI from treasury
+    public fun withdraw(
+        treasury: &mut Treasury,
+        amount: u64,
+        recipient: address,
+        ctx: &mut TxContext,
+    ) {
+        let bal = treasury.balance.split(amount);
+        let coin = coin::from_balance(bal, ctx);
+        transfer::public_transfer(coin, recipient);
     }
 }
