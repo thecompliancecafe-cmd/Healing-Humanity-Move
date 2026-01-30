@@ -1,6 +1,4 @@
 module healing_humanity::identity {
-    use sui::object::UID;
-    use sui::tx_context::TxContext;
     use std::string::String;
 
     /// On-chain identity object (NGO / individual)
@@ -18,7 +16,7 @@ module healing_humanity::identity {
         ctx: &mut TxContext
     ): Identity {
         Identity {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             name,
             wallet,
         }
