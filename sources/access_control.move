@@ -1,6 +1,5 @@
 module healing_humanity::access_control {
     use sui::table;
-    use sui::transfer;
 
     /// Shared roles registry
     public struct Roles has key {
