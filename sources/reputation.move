@@ -1,6 +1,4 @@
 module healing_humanity::reputation {
-    use sui::object;
-    use sui::tx_context;
 
     /// Soulbound reputation / XP object
     /// Non-transferable by design
