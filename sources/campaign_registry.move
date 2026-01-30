@@ -1,6 +1,7 @@
 module healing_humanity::campaign_registry {
 
     use sui::table::Table;
+    use sui::tx_context::TxContext;
 
     /// Registry of campaigns
     public struct CampaignRegistry has key {
@@ -14,10 +15,7 @@ module healing_humanity::campaign_registry {
     }
 
     /// Create registry and admin capability
-    public fun create(
-        ctx: &mut TxContext
-    ): (CampaignRegistry, CampaignAdminCap) {
-
+    public fun create(ctx: &mut TxContext): CampaignAdminCap {
         let registry = CampaignRegistry {
             id: sui::object::new(ctx),
             campaigns: sui::table::new(ctx),
@@ -27,10 +25,11 @@ module healing_humanity::campaign_registry {
             id: sui::object::new(ctx),
         };
 
-        // Registry must be shared (must be done inside module)
+        // Share registry (ownership moves here)
         sui::transfer::share_object(registry);
 
-        (registry, cap)
+        // Only return the cap
+        cap
     }
 
     /// Register a new campaign
