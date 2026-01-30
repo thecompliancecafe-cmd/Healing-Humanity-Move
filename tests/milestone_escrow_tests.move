@@ -1,54 +1,51 @@
 module healing_humanity::milestone_escrow_tests {
 
     use sui::test_scenario;
-    use sui::coin::Coin;
+    use sui::coin::{Coin};
     use sui::sui::SUI;
 
     use healing_humanity::milestone_escrow;
 
     #[test]
-    fun test_deposit_and_release() {
-
-        // Start test scenario
+    fun test_create_and_release() {
         let mut scenario = test_scenario::begin(@0xA);
+
+        // ─────────────────────────────────────────────
+        // Step 1: get ctx
+        // ─────────────────────────────────────────────
         let ctx = test_scenario::ctx(&mut scenario);
 
-        // Create a fake campaign id
-        let campaign_uid = sui::object::new(ctx);
-        let campaign_id = sui::object::uid_to_inner(&campaign_uid);
+        // Create a test coin
+        let coin: Coin<SUI> = test_scenario::mint_sui_for_testing(10, ctx);
 
-        // Take coin from sender
-        let coin: Coin<SUI> =
-            test_scenario::take_from_sender(&mut scenario);
-
-        // Create escrow
-        // NOTE: vault is already shared inside create()
-        let (mut vault, cap) =
+        // ─────────────────────────────────────────────
+        // Step 2: create escrow
+        // ─────────────────────────────────────────────
+        let (vault, cap) =
             milestone_escrow::create(
-                campaign_id,
+                sui::object::new(ctx),
                 coin,
                 ctx
             );
 
-        // Deposit more funds
-        let extra_coin: Coin<SUI> =
-            test_scenario::take_from_sender(&mut scenario);
-
-        milestone_escrow::deposit(
-            &mut vault,
-            extra_coin
-        );
-
-        // Release funds
+        // ─────────────────────────────────────────────
+        // Step 3: release funds
+        // ─────────────────────────────────────────────
         milestone_escrow::release(
             &cap,
-            &mut vault,
-            1u64,
+            vault,
+            5u64,
             @0xB,
             ctx
         );
 
-        // End scenario
+        // ─────────────────────────────────────────────
+        // Step 4: consume remaining objects
+        // ─────────────────────────────────────────────
+        // cap is an object → must be transferred
+        sui::transfer::transfer(cap, @0xA);
+
+        // End scenario AFTER all objects are consumed
         test_scenario::end(scenario);
     }
 }
