@@ -1,19 +1,17 @@
 module healing_humanity::campaign_registry {
 
-    use sui::object::{UID, ID};
     use sui::table;
     use sui::table::Table;
-    use sui::transfer;
 
     /// Registry of campaigns
     public struct CampaignRegistry has key {
-        id: UID,
-        campaigns: Table<ID, address>, // campaign_id -> owner
+        id: sui::object::UID,
+        campaigns: Table<sui::object::ID, address>, // campaign_id -> owner
     }
 
     /// Capability to manage registry
     public struct CampaignAdminCap has key {
-        id: UID,
+        id: sui::object::UID,
     }
 
     /// Create registry
@@ -25,7 +23,7 @@ module healing_humanity::campaign_registry {
             campaigns: table::new(ctx),
         };
 
-        transfer::share_object(registry);
+        sui::transfer::share_object(registry);
         registry
     }
 
@@ -33,7 +31,7 @@ module healing_humanity::campaign_registry {
     public fun register_campaign(
         _cap: &CampaignAdminCap,
         registry: &mut CampaignRegistry,
-        campaign_id: ID,
+        campaign_id: sui::object::ID,
         owner: address
     ) {
         assert!(
@@ -47,7 +45,7 @@ module healing_humanity::campaign_registry {
     /// Get campaign owner
     public fun owner_of(
         registry: &CampaignRegistry,
-        campaign_id: ID
+        campaign_id: sui::object::ID
     ): address {
         *table::borrow(&registry.campaigns, campaign_id)
     }
@@ -55,7 +53,7 @@ module healing_humanity::campaign_registry {
     /// Check if campaign exists
     public fun exists(
         registry: &CampaignRegistry,
-        campaign_id: ID
+        campaign_id: sui::object::ID
     ): bool {
         table::contains(&registry.campaigns, campaign_id)
     }
