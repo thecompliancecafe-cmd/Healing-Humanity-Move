@@ -1,64 +1,68 @@
 module healing_humanity::milestone_escrow {
 
-    use sui::balance;
-    use sui::coin;
-    use sui::coin::Coin;
+    use sui::object::{Self, UID, ID};
+    use sui::tx_context::TxContext;
+    use sui::coin::{Coin};
+    use sui::balance::{Self, Balance};
     use sui::sui::SUI;
+    use sui::transfer;
 
-    use healing_humanity::protocol_governance;
-    use healing_humanity::protocol_governance::ProtocolConfig;
-
-    /// Escrow vault holding campaign funds
+    /// Vault holding escrowed funds for a campaign
     public struct Vault has key {
-        id: sui::object::UID,
-        campaign_id: sui::object::ID,
-        balance: balance::Balance<SUI>,
+        id: UID,
+        campaign_id: ID,
+        balance: Balance<SUI>,
     }
 
-    /// Capability to release funds
+    /// Capability that allows releasing funds
     public struct EscrowCap has key {
-        id: sui::object::UID,
+        id: UID,
+        campaign_id: ID,
     }
 
-    /// Create a new escrow vault
+    /// Create a new escrow vault for a campaign
+    /// The vault is shared inside this module (required by Sui)
     public fun create(
-        campaign_id: sui::object::ID,
-        ctx: &mut sui::tx_context::TxContext
+        campaign_id: ID,
+        ctx: &mut TxContext
     ): (Vault, EscrowCap) {
-        (
-            Vault {
-                id: sui::object::new(ctx),
-                campaign_id,
-                balance: balance::zero<SUI>(),
-            },
-            EscrowCap {
-                id: sui::object::new(ctx),
-            }
-        )
+
+        let vault = Vault {
+            id: object::new(ctx),
+            campaign_id,
+            balance: balance::zero<SUI>(),
+        };
+
+        let cap = EscrowCap {
+            id: object::new(ctx),
+            campaign_id,
+        };
+
+        // Vault must be shared from inside its defining module
+        transfer::share_object(vault);
+
+        (vault, cap)
     }
 
-    /// Deposit funds into escrow
+    /// Deposit SUI into the escrow vault
     public fun deposit(
         vault: &mut Vault,
-        coin_in: Coin<SUI>
+        coin: Coin<SUI>
     ) {
-        let bal = coin::into_balance(coin_in);
+        let bal = balance::from_coin(coin);
         balance::join(&mut vault.balance, bal);
     }
 
-    /// Release funds to recipient
+    /// Release funds to a recipient
     public fun release(
         _cap: &EscrowCap,
-        cfg: &ProtocolConfig,
         vault: &mut Vault,
         amount: u64,
         recipient: address,
-        ctx: &mut sui::tx_context::TxContext
+        ctx: &mut TxContext
     ) {
-        assert!(!protocol_governance::is_paused(cfg), 0);
-
-        let bal_out = balance::split(&mut vault.balance, amount);
-        let coin_out = coin::from_balance(bal_out, ctx);
-        sui::transfer::public_transfer(coin_out, recipient);
+        let bal = balance::split(&mut vault.balance, amount);
+        let coin = balance::to_coin(bal, ctx);
+        transfer::public_transfer(coin, recipient);
     }
 }
