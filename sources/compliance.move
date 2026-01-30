@@ -1,4 +1,5 @@
 module healing_humanity::compliance {
+    use sui::table;
 
     /// Shared compliance registry
     public struct ComplianceRegistry has key {
