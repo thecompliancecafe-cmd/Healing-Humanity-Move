@@ -1,7 +1,5 @@
 module healing_humanity::milestone_escrow {
 
-    use sui::object::{UID, ID};
-    use sui::tx_context::TxContext;
     use sui::coin::Coin;
     use sui::balance::Balance;
     use sui::sui::SUI;
@@ -20,7 +18,7 @@ module healing_humanity::milestone_escrow {
     }
 
     /// Create a new escrow vault for a campaign
-    /// Vault is shared INSIDE this function (correct pattern)
+    /// Vault is shared INSIDE this function (correct Sui pattern)
     public fun create(
         campaign_id: ID,
         initial_coin: Coin<SUI>,
@@ -69,7 +67,7 @@ module healing_humanity::milestone_escrow {
         let bal_out = sui::balance::split(&mut vault.balance, amount);
         let coin_out = sui::coin::from_balance(bal_out, ctx);
 
-        // Public transfer (allowed)
+        // Public transfer (correct for Coin)
         sui::transfer::public_transfer(coin_out, recipient);
     }
 }
