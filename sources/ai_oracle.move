@@ -1,54 +1,50 @@
 module healing_humanity::ai_oracle {
-    use sui::object::UID;
-    use sui::tx_context::TxContext;
-    use sui::table::Table;
-    use sui::transfer;
 
-    /// Registry of approved AI oracle addresses (shared object)
+    /// Shared registry of approved AI oracles
     public struct OracleRegistry has key {
-        id: UID,
-        oracles: Table<address, bool>,
+        id: sui::object::UID,
+        oracles: sui::table::Table<address, bool>,
     }
 
-    /// Capability to manage oracle registry
+    /// Admin capability for oracle management
     public struct OracleAdminCap has key {
-        id: UID,
+        id: sui::object::UID,
     }
 
-    /// Initialize oracle registry (callable once)
-    public fun init(ctx: &mut TxContext): (OracleRegistry, OracleAdminCap) {
+    /// One-time initializer
+    fun init(ctx: &mut sui::tx_context::TxContext) {
         let registry = OracleRegistry {
-            id: UID::new(ctx),
-            oracles: Table::new(ctx),
+            id: sui::object::new(ctx),
+            oracles: sui::table::new(ctx),
         };
 
         let admin_cap = OracleAdminCap {
-            id: UID::new(ctx),
+            id: sui::object::new(ctx),
         };
 
-        // Share registry so other modules can verify oracles
-        transfer::share_object(registry);
+        // Share registry globally
+        sui::transfer::share_object(registry);
 
-        // Return admin capability to caller
-        (registry, admin_cap)
+        // Return admin cap to sender
+        sui::transfer::transfer(admin_cap, sui::tx_context::sender(ctx));
     }
 
-    /// Add a new trusted oracle (admin only)
+    /// Add a new oracle (admin only)
     public fun add_oracle(
         _admin: &OracleAdminCap,
         reg: &mut OracleRegistry,
         addr: address
     ) {
-        if (!Table::contains(&reg.oracles, addr)) {
-            Table::add(&mut reg.oracles, addr, true);
+        if (!sui::table::contains(&reg.oracles, addr)) {
+            sui::table::add(&mut reg.oracles, addr, true);
         }
     }
 
-    /// Read-only check used by attestation / escrow modules
+    /// Check oracle approval
     public fun is_oracle(
         reg: &OracleRegistry,
         addr: address
     ): bool {
-        Table::contains(&reg.oracles, addr)
+        sui::table::contains(&reg.oracles, addr)
     }
 }
