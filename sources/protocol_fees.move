@@ -1,6 +1,4 @@
 module healing_humanity::protocol_fees {
-    use sui::object;
-    use sui::tx_context::TxContext;
 
     /// Protocol fee configuration
     /// fee_bps = fee in basis points (1% = 100 bps)
@@ -14,7 +12,7 @@ module healing_humanity::protocol_fees {
     public fun create(
         treasury: address,
         fee_bps: u64,
-        ctx: &mut TxContext
+        ctx: &mut tx_context::TxContext
     ): FeeConfig {
         FeeConfig {
             id: object::new(ctx),
