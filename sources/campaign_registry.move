@@ -1,7 +1,7 @@
 module healing_humanity::campaign_registry {
 
     use sui::object::{UID, ID};
-    use sui::table::Table;
+    use sui::table::{self, Table};
     use sui::transfer;
 
     /// Registry of campaigns
@@ -15,16 +15,16 @@ module healing_humanity::campaign_registry {
         id: UID,
     }
 
-    /// Create registry and admin capability
+    /// Create registry
     public fun create(
         ctx: &mut sui::tx_context::TxContext
     ): CampaignRegistry {
         let registry = CampaignRegistry {
             id: sui::object::new(ctx),
-            campaigns: Table::new(ctx),
+            campaigns: table::new(ctx),
         };
 
-        // Share the registry object
+        // Share the registry
         transfer::share_object(registry);
         registry
     }
@@ -37,11 +37,11 @@ module healing_humanity::campaign_registry {
         owner: address
     ) {
         assert!(
-            !Table::contains(&registry.campaigns, campaign_id),
+            !table::contains(&registry.campaigns, campaign_id),
             0
         );
 
-        Table::add(&mut registry.campaigns, campaign_id, owner);
+        table::add(&mut registry.campaigns, campaign_id, owner);
     }
 
     /// Get campaign owner
@@ -49,7 +49,7 @@ module healing_humanity::campaign_registry {
         registry: &CampaignRegistry,
         campaign_id: ID
     ): address {
-        *Table::borrow(&registry.campaigns, campaign_id)
+        *table::borrow(&registry.campaigns, campaign_id)
     }
 
     /// Check if campaign exists
@@ -57,6 +57,6 @@ module healing_humanity::campaign_registry {
         registry: &CampaignRegistry,
         campaign_id: ID
     ): bool {
-        Table::contains(&registry.campaigns, campaign_id)
+        table::contains(&registry.campaigns, campaign_id)
     }
 }
