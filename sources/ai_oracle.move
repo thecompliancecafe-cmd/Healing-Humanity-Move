@@ -1,7 +1,8 @@
 module healing_humanity::ai_oracle {
 
-    use sui::object::{UID};
+    use sui::object::UID;
     use sui::tx_context::TxContext;
+    use sui::table;
     use sui::table::Table;
     use sui::transfer;
 
@@ -16,22 +17,21 @@ module healing_humanity::ai_oracle {
         id: UID,
     }
 
-    /// Initialize oracle registry (shared object)
-    public fun init(ctx: &mut TxContext): OracleAdminCap {
+    /// Module initializer (runs at publish time)
+    fun init(ctx: &mut TxContext) {
         let registry = OracleRegistry {
             id: sui::object::new(ctx),
-            oracles: Table::new(ctx),
+            oracles: table::new(ctx),
         };
 
-        let cap = OracleAdminCap {
-            id: sui::object::new(ctx),
-        };
-
-        // Share registry globally
         transfer::share_object(registry);
+    }
 
-        // ONLY return admin cap
-        cap
+    /// Create an admin capability (call AFTER publish)
+    public fun create_admin_cap(ctx: &mut TxContext): OracleAdminCap {
+        OracleAdminCap {
+            id: sui::object::new(ctx),
+        }
     }
 
     /// Add a new oracle
@@ -41,11 +41,11 @@ module healing_humanity::ai_oracle {
         oracle: address
     ) {
         assert!(
-            !Table::contains(&registry.oracles, oracle),
+            !table::contains(&registry.oracles, oracle),
             0
         );
 
-        Table::add(&mut registry.oracles, oracle, true);
+        table::add(&mut registry.oracles, oracle, true);
     }
 
     /// Check if address is oracle
@@ -53,6 +53,6 @@ module healing_humanity::ai_oracle {
         registry: &OracleRegistry,
         oracle: address
     ): bool {
-        Table::contains(&registry.oracles, oracle)
+        table::contains(&registry.oracles, oracle)
     }
 }
