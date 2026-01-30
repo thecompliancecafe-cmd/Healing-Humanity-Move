@@ -4,26 +4,29 @@ module healing_humanity::milestone_escrow {
     use sui::object::{UID, ID};
     use sui::tx_context::TxContext;
 
-    use sui::coin::{self, Coin};
+    use sui::coin;
+    use sui::coin::Coin;
+
     use sui::balance;
     use sui::balance::Balance;
+
     use sui::transfer;
 
-    /// Escrow vault holding campaign funds
+    /// Escrow vault holding funds for a campaign
     public struct Vault has key {
         id: UID,
         campaign_id: ID,
         balance: Balance<sui::sui::SUI>,
     }
 
-    /// Capability allowing controlled release
+    /// Capability allowing release of funds
     public struct EscrowCap has key {
         id: UID,
         campaign_id: ID,
     }
 
     /// Create escrow vault and cap
-    /// NOTE: vault is shared HERE (tests must not share it)
+    /// NOTE: vault is shared here (tests must NOT share it)
     public fun create(
         campaign_id: ID,
         initial_coin: Coin<sui::sui::SUI>,
@@ -43,18 +46,18 @@ module healing_humanity::milestone_escrow {
             campaign_id,
         };
 
-        // ✅ MUST be shared inside the module
+        // ✅ MUST be done inside this module
         transfer::share_object(vault);
 
         (vault, cap)
     }
 
-    /// Add funds to escrow
+    /// Deposit more funds into escrow
     public fun deposit(
         vault: &mut Vault,
-        coin: Coin<sui::sui::SUI>
+        coin_in: Coin<sui::sui::SUI>
     ) {
-        let bal = coin::into_balance(coin);
+        let bal = coin::into_balance(coin_in);
         balance::join(&mut vault.balance, bal);
     }
 
