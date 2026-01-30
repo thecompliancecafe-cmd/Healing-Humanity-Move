@@ -1,12 +1,13 @@
 module healing_humanity::milestone_escrow {
-    use sui::object::{UID, ID, Self};
+    use sui::object::{self, UID, ID};
     use sui::tx_context::TxContext;
-    use sui::balance::{Self, Balance};
-    use sui::coin::{Self, Coin};
+    use sui::balance::Balance;
+    use sui::coin::Coin;
+    use sui::sui::SUI;
     use sui::transfer;
     use sui::event;
 
-    use healing_humanity::protocol_governance::{Self, ProtocolConfig};
+    use healing_humanity::protocol_governance::{self, ProtocolConfig};
 
     /// Event: funds deposited
     public struct FundsDeposited has copy, drop {
@@ -25,7 +26,7 @@ module healing_humanity::milestone_escrow {
     public struct Vault has key {
         id: UID,
         campaign_id: ID,
-        balance: Balance,
+        balance: Balance<SUI>,
     }
 
     /// Capability required to release funds
@@ -33,32 +34,35 @@ module healing_humanity::milestone_escrow {
         id: UID,
     }
 
-    /// Create vault + admin capability (vault is auto-shared)
+    /// Create vault + admin capability
     public fun create(
         campaign_id: ID,
         ctx: &mut TxContext
-    ): EscrowAdminCap {
-        let vault = Vault {
-            id: UID::new(ctx),
-            campaign_id,
-            balance: balance::zero(),
-        };
+    ): (Vault, EscrowAdminCap) {
+        (
+            Vault {
+                id: object::new(ctx),
+                campaign_id,
+                balance: Balance::zero(),
+            },
+            EscrowAdminCap {
+                id: object::new(ctx),
+            }
+        )
+    }
 
-        let cap = EscrowAdminCap {
-            id: UID::new(ctx),
-        };
-
+    /// Share vault so anyone can deposit
+    public fun share(vault: Vault) {
         transfer::share_object(vault);
-        cap
     }
 
     /// Deposit SUI into vault (permissionless)
     public fun deposit(
         vault: &mut Vault,
-        coin_in: Coin<sui::sui::SUI>
+        coin_in: Coin<SUI>
     ) {
-        let amount = coin::value(&coin_in);
-        balance::deposit(&mut vault.balance, coin_in);
+        let amount = coin_in.value();
+        vault.balance.join(coin_in);
 
         event::emit(FundsDeposited {
             vault_id: object::id(vault),
@@ -72,12 +76,12 @@ module healing_humanity::milestone_escrow {
         cfg: &ProtocolConfig,
         vault: &mut Vault,
         amount: u64,
-        recipient: address,
-        ctx: &mut TxContext
+        recipient: address
     ) {
+        // Governance safety check
         assert!(!protocol_governance::is_paused(cfg), 0);
 
-        let coin_out = balance::withdraw(&mut vault.balance, amount, ctx);
+        let coin_out = vault.balance.split(amount);
         transfer::public_transfer(coin_out, recipient);
 
         event::emit(FundsReleased {
