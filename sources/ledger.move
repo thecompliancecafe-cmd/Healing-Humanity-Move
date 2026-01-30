@@ -1,6 +1,4 @@
 module healing_humanity::ledger {
-    use sui::object::{UID, ID};
-    use sui::tx_context::TxContext;
 
     /// Immutable ledger entry for audit trails
     public struct LedgerEntry has key {
@@ -18,7 +16,7 @@ module healing_humanity::ledger {
         ctx: &mut TxContext
     ): LedgerEntry {
         LedgerEntry {
-            id: UID::new(ctx),
+            id: object::new(ctx),
             campaign_id,
             donor,
             amount,
