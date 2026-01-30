@@ -1,50 +1,57 @@
 module healing_humanity::ai_oracle {
 
-    /// Shared registry of approved AI oracles
+    use sui::object::{Self, UID};
+    use sui::tx_context::TxContext;
+    use sui::table::{Self, Table};
+    use sui::transfer;
+
+    /// Registry of approved oracle addresses
     public struct OracleRegistry has key {
-        id: sui::object::UID,
-        oracles: sui::table::Table<address, bool>,
+        id: UID,
+        oracles: Table<address, bool>,
     }
 
-    /// Admin capability for oracle management
+    /// Capability to manage oracle registry
     public struct OracleAdminCap has key {
-        id: sui::object::UID,
+        id: UID,
     }
 
-    /// One-time initializer
-    fun init(ctx: &mut sui::tx_context::TxContext) {
+    /// Create registry + admin capability
+    /// NOTE: This is NOT an `init` function (those are special in Sui)
+    public fun create(
+        ctx: &mut TxContext
+    ): (OracleRegistry, OracleAdminCap) {
         let registry = OracleRegistry {
-            id: sui::object::new(ctx),
-            oracles: sui::table::new(ctx),
+            id: object::new(ctx),
+            oracles: table::new(ctx),
         };
 
-        let admin_cap = OracleAdminCap {
-            id: sui::object::new(ctx),
+        let cap = OracleAdminCap {
+            id: object::new(ctx),
         };
 
-        // Share registry globally
-        sui::transfer::share_object(registry);
+        // Registry should be shared
+        transfer::share_object(registry);
 
-        // Return admin cap to sender
-        sui::transfer::transfer(admin_cap, sui::tx_context::sender(ctx));
+        (registry, cap)
     }
 
-    /// Add a new oracle (admin only)
+    /// Add a new oracle address
     public fun add_oracle(
-        _admin: &OracleAdminCap,
-        reg: &mut OracleRegistry,
-        addr: address
+        _cap: &OracleAdminCap,
+        registry: &mut OracleRegistry,
+        oracle: address
     ) {
-        if (!sui::table::contains(&reg.oracles, addr)) {
-            sui::table::add(&mut reg.oracles, addr, true);
+        if (!table::contains(&registry.oracles, oracle)) {
+            table::add(&mut registry.oracles, oracle, true);
         }
     }
 
-    /// Check oracle approval
+    /// Check if an address is a valid oracle
     public fun is_oracle(
-        reg: &OracleRegistry,
-        addr: address
+        registry: &OracleRegistry,
+        oracle: address
     ): bool {
-        sui::table::contains(&reg.oracles, addr)
+        table::contains(&registry.oracles, oracle)
     }
 }
