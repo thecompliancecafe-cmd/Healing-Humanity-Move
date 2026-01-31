@@ -1,48 +1,50 @@
 module healing_humanity::treasury {
 
-    use sui::balance::Balance;
+    use sui::balance;
     use sui::coin::Coin;
-    use sui::sui::SUI;
 
-    /// Treasury object holding pooled funds
+    /// Treasury vault
     public struct Treasury has key {
         id: UID,
-        balance: Balance<SUI>,
+        balance: balance::Balance<sui::sui::SUI>,
     }
 
-    /// Admin capability for treasury control
+    /// Treasury admin capability
     public struct TreasuryCap has key {
         id: UID,
     }
 
-    /// Create a new treasury
-    public fun create(ctx: &mut TxContext): (Treasury, TreasuryCap) {
+    /// Create treasury
+    public fun create(
+        initial_coin: Coin<sui::sui::SUI>,
+        ctx: &mut TxContext
+    ): TreasuryCap {
         let treasury = Treasury {
-            id: sui::object::new(ctx),
-            balance: sui::balance::zero<SUI>(),
+            id: object::new(ctx),
+            balance: sui::coin::into_balance(initial_coin),
         };
 
         let cap = TreasuryCap {
-            id: sui::object::new(ctx),
+            id: object::new(ctx),
         };
 
         // Treasury must be shared
-        sui::transfer::share_object(treasury);
+        transfer::share_object(treasury);
 
-        (treasury, cap)
+        cap
     }
 
-    /// Deposit SUI into treasury
+    /// Deposit funds
     public fun deposit(
         _cap: &TreasuryCap,
         treasury: &mut Treasury,
-        coin: Coin<SUI>
+        coin: Coin<sui::sui::SUI>
     ) {
         let bal = sui::coin::into_balance(coin);
-        sui::balance::join(&mut treasury.balance, bal);
+        balance::join(&mut treasury.balance, bal);
     }
 
-    /// Withdraw SUI from treasury
+    /// Withdraw funds
     public fun withdraw(
         _cap: &TreasuryCap,
         treasury: &mut Treasury,
@@ -50,8 +52,13 @@ module healing_humanity::treasury {
         recipient: address,
         ctx: &mut TxContext
     ) {
-        let bal = sui::balance::split(&mut treasury.balance, amount);
+        let bal = balance::split(&mut treasury.balance, amount);
         let coin = sui::coin::from_balance(bal, ctx);
-        sui::transfer::public_transfer(coin, recipient);
+        transfer::public_transfer(coin, recipient);
+    }
+
+    /// View balance
+    public fun balance(treasury: &Treasury): u64 {
+        balance::value(&treasury.balance)
     }
 }
