@@ -7,37 +7,69 @@ module healing_humanity::campaign_registry {
     use std::vector;
 
     /// -----------------------------
+    /// Errors
+    /// -----------------------------
+    const E_INVALID_INPUT: u64 = 0;
+    const E_NOT_OWNER: u64 = 1;
+    const E_INVALID_STATE: u64 = 2;
+    const E_ALREADY_REGISTERED: u64 = 3;
+
+    /// -----------------------------
+    /// Campaign lifecycle
+    /// -----------------------------
+    public enum CampaignStatus has copy, drop, store {
+        CREATED,
+        ACTIVE,
+        PAUSED,
+        REVOKED,
+        COMPLETED,
+    }
+
+    /// -----------------------------
     /// Events
     /// -----------------------------
     public struct CampaignCreated has copy, drop {
         campaign_id: ID,
-        name: vector<u8>,
-        target: u64,
         owner: address,
+        target: u64,
     }
 
-    public struct CampaignClosed has copy, drop {
+    public struct CampaignStatusChanged has copy, drop {
         campaign_id: ID,
+        old_status: u8,
+        new_status: u8,
     }
 
     /// -----------------------------
-    /// Campaign object (business)
+    /// Campaign object
     /// -----------------------------
     public struct Campaign has key {
         id: UID,
         name: vector<u8>,
         target: u64,
-        raised: u64,
         owner: address,
-        is_active: bool,
+        status: CampaignStatus,
     }
 
     /// -----------------------------
-    /// Registry object (index)
+    /// Registry object (existence only)
     /// -----------------------------
     public struct CampaignRegistry has key {
         id: UID,
         campaigns: Table<ID, bool>,
+    }
+
+    /// -----------------------------
+    /// Internal helpers
+    /// -----------------------------
+    fun status_to_u8(status: CampaignStatus): u8 {
+        match (status) {
+            CampaignStatus::CREATED => 0,
+            CampaignStatus::ACTIVE => 1,
+            CampaignStatus::PAUSED => 2,
+            CampaignStatus::REVOKED => 3,
+            CampaignStatus::COMPLETED => 4,
+        }
     }
 
     /// -----------------------------
@@ -60,60 +92,94 @@ module healing_humanity::campaign_registry {
         target: u64,
         ctx: &mut TxContext
     ) {
-        assert!(target > 0, 0);
-        assert!(!vector::is_empty(&name), 1);
+        assert!(target > 0, E_INVALID_INPUT);
+        assert!(!vector::is_empty(&name), E_INVALID_INPUT);
 
         let campaign = Campaign {
             id: object::new(ctx),
             name,
             target,
-            raised: 0,
             owner: tx_context::sender(ctx),
-            is_active: true,
+            status: CampaignStatus::ACTIVE,
         };
 
         let campaign_id = object::id(&campaign);
 
-        // Prevent duplicate registration
         assert!(
             !table::contains(&registry.campaigns, campaign_id),
-            2
+            E_ALREADY_REGISTERED
         );
 
         table::add(&mut registry.campaigns, campaign_id, true);
 
-        // Emit event
         sui::event::emit(CampaignCreated {
             campaign_id,
-            name: campaign.name,
-            target,
             owner: campaign.owner,
+            target,
         });
 
         transfer::share_object(campaign);
     }
 
     /// -----------------------------
-    /// Close a campaign (owner only)
+    /// Owner controls
     /// -----------------------------
-    public entry fun close_campaign(
+    public entry fun pause_campaign(
         campaign: &mut Campaign,
         ctx: &TxContext
     ) {
-        assert!(campaign.is_active, 3);
-        assert!(campaign.owner == tx_context::sender(ctx), 4);
+        assert!(campaign.owner == tx_context::sender(ctx), E_NOT_OWNER);
+        assert!(campaign.status == CampaignStatus::ACTIVE, E_INVALID_STATE);
 
-        campaign.is_active = false;
+        let old = campaign.status;
+        campaign.status = CampaignStatus::PAUSED;
 
-        sui::event::emit(CampaignClosed {
+        sui::event::emit(CampaignStatusChanged {
             campaign_id: object::id(campaign),
+            old_status: status_to_u8(old),
+            new_status: status_to_u8(campaign.status),
+        });
+    }
+
+    public entry fun resume_campaign(
+        campaign: &mut Campaign,
+        ctx: &TxContext
+    ) {
+        assert!(campaign.owner == tx_context::sender(ctx), E_NOT_OWNER);
+        assert!(campaign.status == CampaignStatus::PAUSED, E_INVALID_STATE);
+
+        let old = campaign.status;
+        campaign.status = CampaignStatus::ACTIVE;
+
+        sui::event::emit(CampaignStatusChanged {
+            campaign_id: object::id(campaign),
+            old_status: status_to_u8(old),
+            new_status: status_to_u8(campaign.status),
         });
     }
 
     /// -----------------------------
-    /// Read-only helpers
+    /// Admin / compliance controls
     /// -----------------------------
-    public fun is_registered(
+    public entry fun revoke_campaign(
+        campaign: &mut Campaign
+    ) {
+        assert!(campaign.status != CampaignStatus::REVOKED, E_INVALID_STATE);
+
+        let old = campaign.status;
+        campaign.status = CampaignStatus::REVOKED;
+
+        sui::event::emit(CampaignStatusChanged {
+            campaign_id: object::id(campaign),
+            old_status: status_to_u8(old),
+            new_status: status_to_u8(campaign.status),
+        });
+    }
+
+    /// -----------------------------
+    /// Read-only helpers (ESCROW USES THESE)
+    /// -----------------------------
+    public fun exists(
         registry: &CampaignRegistry,
         campaign_id: ID
     ): bool {
@@ -121,6 +187,10 @@ module healing_humanity::campaign_registry {
     }
 
     public fun is_active(campaign: &Campaign): bool {
-        campaign.is_active
+        campaign.status == CampaignStatus::ACTIVE
+    }
+
+    public fun owner_of(campaign: &Campaign): address {
+        campaign.owner
     }
 }
