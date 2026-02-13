@@ -1,10 +1,7 @@
 module healing_humanity::campaign_registry {
 
-    use sui::object::{Self, UID, ID};
-    use sui::tx_context::{Self, TxContext};
     use sui::table::{Self, Table};
-    use sui::transfer;
-    use std::vector;
+    use healing_humanity::protocol_fees;
 
     /// -----------------------------
     /// Errors
@@ -13,6 +10,7 @@ module healing_humanity::campaign_registry {
     const E_NOT_OWNER: u64 = 1;
     const E_INVALID_STATE: u64 = 2;
     const E_ALREADY_REGISTERED: u64 = 3;
+    const E_INVALID_TIER: u64 = 4;
 
     /// -----------------------------
     /// Campaign lifecycle
@@ -32,6 +30,7 @@ module healing_humanity::campaign_registry {
         campaign_id: ID,
         owner: address,
         target: u64,
+        tier: u8,
     }
 
     public struct CampaignStatusChanged has copy, drop {
@@ -49,10 +48,11 @@ module healing_humanity::campaign_registry {
         target: u64,
         owner: address,
         status: CampaignStatus,
+        tier: u8,
     }
 
     /// -----------------------------
-    /// Registry object (existence only)
+    /// Registry object
     /// -----------------------------
     public struct CampaignRegistry has key {
         id: UID,
@@ -73,9 +73,9 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// Create the global registry (once)
+    /// Create global registry
     /// -----------------------------
-    public entry fun create_registry(ctx: &mut TxContext) {
+    public fun create_registry(ctx: &mut TxContext) {
         let registry = CampaignRegistry {
             id: object::new(ctx),
             campaigns: table::new(ctx),
@@ -84,16 +84,24 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// Create + register a campaign
+    /// Create + register campaign
     /// -----------------------------
-    public entry fun create_campaign(
+    public fun create_campaign(
         registry: &mut CampaignRegistry,
         name: vector<u8>,
         target: u64,
+        tier: u8,
         ctx: &mut TxContext
     ) {
         assert!(target > 0, E_INVALID_INPUT);
         assert!(!vector::is_empty(&name), E_INVALID_INPUT);
+
+        // Validate tier via protocol_fees public accessors
+        assert!(
+            tier == protocol_fees::tier_ngo() ||
+            tier == protocol_fees::tier_csr(),
+            E_INVALID_TIER
+        );
 
         let campaign = Campaign {
             id: object::new(ctx),
@@ -101,6 +109,7 @@ module healing_humanity::campaign_registry {
             target,
             owner: tx_context::sender(ctx),
             status: CampaignStatus::ACTIVE,
+            tier,
         };
 
         let campaign_id = object::id(&campaign);
@@ -116,6 +125,7 @@ module healing_humanity::campaign_registry {
             campaign_id,
             owner: campaign.owner,
             target,
+            tier,
         });
 
         transfer::share_object(campaign);
@@ -124,7 +134,7 @@ module healing_humanity::campaign_registry {
     /// -----------------------------
     /// Owner controls
     /// -----------------------------
-    public entry fun pause_campaign(
+    public fun pause_campaign(
         campaign: &mut Campaign,
         ctx: &TxContext
     ) {
@@ -141,7 +151,7 @@ module healing_humanity::campaign_registry {
         });
     }
 
-    public entry fun resume_campaign(
+    public fun resume_campaign(
         campaign: &mut Campaign,
         ctx: &TxContext
     ) {
@@ -161,7 +171,7 @@ module healing_humanity::campaign_registry {
     /// -----------------------------
     /// Admin / compliance controls
     /// -----------------------------
-    public entry fun revoke_campaign(
+    public fun revoke_campaign(
         campaign: &mut Campaign
     ) {
         assert!(campaign.status != CampaignStatus::REVOKED, E_INVALID_STATE);
@@ -177,7 +187,7 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// Read-only helpers (ESCROW USES THESE)
+    /// Read-only helpers
     /// -----------------------------
     public fun exists(
         registry: &CampaignRegistry,
@@ -192,5 +202,9 @@ module healing_humanity::campaign_registry {
 
     public fun owner_of(campaign: &Campaign): address {
         campaign.owner
+    }
+
+    public fun tier_of(campaign: &Campaign): u8 {
+        campaign.tier
     }
 }
