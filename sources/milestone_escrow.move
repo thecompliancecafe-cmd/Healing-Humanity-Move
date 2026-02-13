@@ -1,7 +1,8 @@
 module healing_humanity::milestone_escrow {
 
-    use sui::coin::Coin;
-    use sui::balance::Balance;
+    use sui::coin::{Self, Coin};
+    use sui::balance::{Self, Balance};
+    use healing_humanity::protocol_fees;
 
     /// ------------------------
     /// Errors
@@ -27,6 +28,7 @@ module healing_humanity::milestone_escrow {
     public struct Vault has key {
         id: UID,
         campaign_id: ID,
+        tier: u8,
         balance: Balance<sui::sui::SUI>,
         milestones: vector<Milestone>,
         closed: bool,
@@ -42,19 +44,20 @@ module healing_humanity::milestone_escrow {
 
     /// ------------------------
     /// Create escrow with milestones
-    /// ENTRY — RETURNS NOTHING
     /// ------------------------
-    public entry fun create(
+    public fun create(
         campaign_id: ID,
+        tier: u8,
         initial_coin: Coin<sui::sui::SUI>,
         milestone_amounts: vector<u64>,
         ctx: &mut TxContext
     ) {
-        let balance = sui::coin::into_balance(initial_coin);
+        let balance = coin::into_balance(initial_coin);
         let mut milestones = vector::empty<Milestone>();
 
         let mut i = 0;
         let len = vector::length(&milestone_amounts);
+
         while (i < len) {
             let amt = *vector::borrow(&milestone_amounts, i);
             vector::push_back(
@@ -65,47 +68,46 @@ module healing_humanity::milestone_escrow {
         };
 
         let vault = Vault {
-            id: sui::object::new(ctx),
+            id: object::new(ctx),
             campaign_id,
+            tier,
             balance,
             milestones,
             closed: false,
         };
 
         let cap = EscrowCap {
-            id: sui::object::new(ctx),
+            id: object::new(ctx),
             campaign_id,
         };
 
-        // Share the vault
-        sui::transfer::share_object(vault);
-
-        // Transfer EscrowCap to transaction sender
-        sui::transfer::transfer(cap, sui::tx_context::sender(ctx));
+        transfer::share_object(vault);
+        transfer::transfer(cap, tx_context::sender(ctx));
     }
 
     /// ------------------------
     /// Deposit additional funds
     /// ------------------------
-    public entry fun deposit(
+    public fun deposit(
         vault: &mut Vault,
         coin: Coin<sui::sui::SUI>
     ) {
         assert!(!vault.closed, E_ESCROW_CLOSED);
-        sui::balance::join(
+        balance::join(
             &mut vault.balance,
-            sui::coin::into_balance(coin)
+            coin::into_balance(coin)
         );
     }
 
     /// ------------------------
     /// Release a milestone
     /// ------------------------
-    public entry fun release_milestone(
+    public fun release_milestone(
         cap: &EscrowCap,
         vault: &mut Vault,
         milestone_id: u64,
         recipient: address,
+        treasury: address,
         ctx: &mut TxContext
     ) {
         assert!(!vault.closed, E_ESCROW_CLOSED);
@@ -119,15 +121,37 @@ module healing_humanity::milestone_escrow {
 
         let amount = milestone.amount;
         assert!(
-            sui::balance::value(&vault.balance) >= amount,
+            balance::value(&vault.balance) >= amount,
             E_INSUFFICIENT_BALANCE
         );
 
-        let bal_out = sui::balance::split(&mut vault.balance, amount);
+        // -----------------------------------
+        // PROTOCOL FEE CALCULATION
+        // -----------------------------------
+
+        let fee = protocol_fees::compute_fee(amount, vault.tier);
+
+        // Split total milestone amount
+        let mut milestone_balance = balance::split(&mut vault.balance, amount);
+
+        // Split fee from milestone amount
+        let fee_balance = balance::split(&mut milestone_balance, fee);
+
         milestone.released = true;
 
-        sui::transfer::public_transfer(
-            sui::coin::from_balance(bal_out, ctx),
+        // -----------------------------------
+        // TRANSFERS
+        // -----------------------------------
+
+        // Send fee → treasury
+        transfer::public_transfer(
+            coin::from_balance(fee_balance, ctx),
+            treasury
+        );
+
+        // Send net → recipient
+        transfer::public_transfer(
+            coin::from_balance(milestone_balance, ctx),
             recipient
         );
     }
@@ -135,7 +159,7 @@ module healing_humanity::milestone_escrow {
     /// ------------------------
     /// Close escrow
     /// ------------------------
-    public entry fun close(
+    public fun close(
         cap: &EscrowCap,
         vault: &mut Vault
     ) {
