@@ -2,7 +2,10 @@ module healing_humanity::milestone_escrow {
 
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance};
+
     use healing_humanity::protocol_fees;
+    use healing_humanity::treasury;
+    use healing_humanity::treasury::Treasury;
 
     /// ------------------------
     /// Errors
@@ -43,7 +46,7 @@ module healing_humanity::milestone_escrow {
     }
 
     /// ------------------------
-    /// Create escrow with milestones
+    /// Create escrow
     /// ------------------------
     public fun create(
         campaign_id: ID,
@@ -86,13 +89,14 @@ module healing_humanity::milestone_escrow {
     }
 
     /// ------------------------
-    /// Deposit additional funds
+    /// Deposit funds
     /// ------------------------
     public fun deposit(
         vault: &mut Vault,
         coin: Coin<sui::sui::SUI>
     ) {
         assert!(!vault.closed, E_ESCROW_CLOSED);
+
         balance::join(
             &mut vault.balance,
             coin::into_balance(coin)
@@ -100,14 +104,14 @@ module healing_humanity::milestone_escrow {
     }
 
     /// ------------------------
-    /// Release a milestone
+    /// Release milestone
     /// ------------------------
     public fun release_milestone(
         cap: &EscrowCap,
         vault: &mut Vault,
         milestone_id: u64,
         recipient: address,
-        treasury: address,
+        treasury: &mut Treasury,
         ctx: &mut TxContext
     ) {
         assert!(!vault.closed, E_ESCROW_CLOSED);
@@ -120,36 +124,42 @@ module healing_humanity::milestone_escrow {
         assert!(!milestone.released, E_MILESTONE_ALREADY_RELEASED);
 
         let amount = milestone.amount;
+
         assert!(
             balance::value(&vault.balance) >= amount,
             E_INSUFFICIENT_BALANCE
         );
 
-        // -----------------------------------
-        // PROTOCOL FEE CALCULATION
-        // -----------------------------------
+        // -----------------------------
+        // Protocol Fee Calculation
+        // -----------------------------
 
         let fee = protocol_fees::compute_fee(amount, vault.tier);
 
-        // Split total milestone amount
+        // Split full milestone amount from vault
         let mut milestone_balance = balance::split(&mut vault.balance, amount);
 
-        // Split fee from milestone amount
+        // Split fee portion
         let fee_balance = balance::split(&mut milestone_balance, fee);
 
         milestone.released = true;
 
-        // -----------------------------------
-        // TRANSFERS
-        // -----------------------------------
+        // -----------------------------
+        // Deposit fee into Treasury
+        // -----------------------------
 
-        // Send fee → treasury
-        transfer::public_transfer(
-            coin::from_balance(fee_balance, ctx),
-            treasury
+        let fee_coin = coin::from_balance(fee_balance, ctx);
+
+        treasury::deposit(
+            treasury,
+            fee_coin,
+            ctx
         );
 
-        // Send net → recipient
+        // -----------------------------
+        // Send net amount to recipient
+        // -----------------------------
+
         transfer::public_transfer(
             coin::from_balance(milestone_balance, ctx),
             recipient
