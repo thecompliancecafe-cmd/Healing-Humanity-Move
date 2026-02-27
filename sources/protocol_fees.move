@@ -1,22 +1,60 @@
 module healing_humanity::protocol_fees {
 
+    use sui::event;
+    use healing_humanity::circuit_breaker;
+
     /// ============================================================
     /// CONSTANTS
     /// ============================================================
 
     const MAX_BPS: u64 = 10_000;
 
-    // Tier identifiers (internal constants)
     const TIER_NGO: u8 = 1;
     const TIER_CSR: u8 = 2;
 
-    // Fee values in basis points
-    const NGO_FEE_BPS: u64 = 125; // 1.25%
-    const CSR_FEE_BPS: u64 = 75;  // 0.75%
-
-    // Error codes
+    /// Error codes
     const EInvalidTier: u64 = 1;
     const EInvalidFeeCalculation: u64 = 2;
+    const EProtocolPaused: u64 = 3;
+
+    /// ============================================================
+    /// Shared Fee Configuration
+    /// ============================================================
+
+    public struct ProtocolFeeConfig has key {
+        id: UID,
+        ngo_fee_bps: u64,
+        csr_fee_bps: u64,
+    }
+
+    public struct FeeAdminCap has key {
+        id: UID,
+    }
+
+    public struct FeeUpdated has copy, drop {
+        tier: u8,
+        new_fee_bps: u64,
+    }
+
+    /// ============================================================
+    /// INIT
+    /// ============================================================
+
+    fun init(ctx: &mut TxContext) {
+
+        let config = ProtocolFeeConfig {
+            id: object::new(ctx),
+            ngo_fee_bps: 125,
+            csr_fee_bps: 75,
+        };
+
+        let cap = FeeAdminCap {
+            id: object::new(ctx),
+        };
+
+        transfer::share_object(config);
+        transfer::transfer(cap, tx_context::sender(ctx));
+    }
 
     /// ============================================================
     /// Public Tier Accessors
@@ -25,43 +63,75 @@ module healing_humanity::protocol_fees {
     public fun tier_ngo(): u8 { TIER_NGO }
     public fun tier_csr(): u8 { TIER_CSR }
 
-    /// ============================================================
-    /// Tier Validation
-    /// ============================================================
-
     public fun is_valid_tier(tier: u8): bool {
         tier == TIER_NGO || tier == TIER_CSR
     }
 
     /// ============================================================
-    /// TIER → FEE MAPPING
+    /// Fee Update (Circuit Breaker Protected)
     /// ============================================================
 
-    public fun fee_for_tier(tier: u8): u64 {
+    public fun update_fee(
+        _cap: &FeeAdminCap,
+        cb: &circuit_breaker::CircuitBreaker,
+        config: &mut ProtocolFeeConfig,
+        tier: u8,
+        new_fee_bps: u64
+    ) {
+        assert!(
+            !circuit_breaker::is_paused(cb),
+            EProtocolPaused
+        );
+
+        assert!(new_fee_bps <= MAX_BPS, EInvalidFeeCalculation);
+
+        if (tier == TIER_NGO) {
+            config.ngo_fee_bps = new_fee_bps;
+        } else if (tier == TIER_CSR) {
+            config.csr_fee_bps = new_fee_bps;
+        } else {
+            abort EInvalidTier
+        };
+
+        event::emit(FeeUpdated {
+            tier,
+            new_fee_bps,
+        });
+    }
+
+    /// ============================================================
+    /// Fee Queries
+    /// ============================================================
+
+    public fun fee_for_tier(
+        config: &ProtocolFeeConfig,
+        tier: u8
+    ): u64 {
         if (tier == TIER_CSR) {
-            CSR_FEE_BPS
+            config.csr_fee_bps
         } else if (tier == TIER_NGO) {
-            NGO_FEE_BPS
+            config.ngo_fee_bps
         } else {
             abort EInvalidTier
         }
     }
 
-    /// ============================================================
-    /// FEE CALCULATION
-    /// ============================================================
-
-    public fun compute_fee(amount: u64, tier: u8): u64 {
-        let fee_bps = fee_for_tier(tier);
-
-        // Defensive invariant
+    public fun compute_fee(
+        config: &ProtocolFeeConfig,
+        amount: u64,
+        tier: u8
+    ): u64 {
+        let fee_bps = fee_for_tier(config, tier);
         assert!(fee_bps <= MAX_BPS, EInvalidFeeCalculation);
-
         amount * fee_bps / MAX_BPS
     }
 
-    public fun compute_net_amount(amount: u64, tier: u8): u64 {
-        let fee = compute_fee(amount, tier);
+    public fun compute_net_amount(
+        config: &ProtocolFeeConfig,
+        amount: u64,
+        tier: u8
+    ): u64 {
+        let fee = compute_fee(config, amount, tier);
         amount - fee
     }
 }
