@@ -1,7 +1,10 @@
 module healing_humanity::campaign_registry {
 
     use sui::table::{Self, Table};
+    use sui::event;
+
     use healing_humanity::protocol_fees;
+    use healing_humanity::circuit_breaker;
 
     /// -----------------------------
     /// Errors
@@ -11,6 +14,7 @@ module healing_humanity::campaign_registry {
     const E_INVALID_STATE: u64 = 2;
     const E_ALREADY_REGISTERED: u64 = 3;
     const E_INVALID_TIER: u64 = 4;
+    const E_PROTOCOL_PAUSED: u64 = 5;
 
     /// -----------------------------
     /// Campaign lifecycle
@@ -87,16 +91,22 @@ module healing_humanity::campaign_registry {
     /// Create + register campaign
     /// -----------------------------
     public fun create_campaign(
+        cb: &circuit_breaker::CircuitBreaker,
         registry: &mut CampaignRegistry,
         name: vector<u8>,
         target: u64,
         tier: u8,
         ctx: &mut TxContext
     ) {
+        // Circuit breaker check (campaign-specific)
+        assert!(
+            !circuit_breaker::campaigns_paused(cb),
+            E_PROTOCOL_PAUSED
+        );
+
         assert!(target > 0, E_INVALID_INPUT);
         assert!(!vector::is_empty(&name), E_INVALID_INPUT);
 
-        // Validate tier via protocol_fees public accessors
         assert!(
             tier == protocol_fees::tier_ngo() ||
             tier == protocol_fees::tier_csr(),
@@ -121,7 +131,7 @@ module healing_humanity::campaign_registry {
 
         table::add(&mut registry.campaigns, campaign_id, true);
 
-        sui::event::emit(CampaignCreated {
+        event::emit(CampaignCreated {
             campaign_id,
             owner: campaign.owner,
             target,
@@ -135,16 +145,23 @@ module healing_humanity::campaign_registry {
     /// Owner controls
     /// -----------------------------
     public fun pause_campaign(
+        cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
         ctx: &TxContext
     ) {
+        // Campaign-level pause enforcement
+        assert!(
+            !circuit_breaker::campaigns_paused(cb),
+            E_PROTOCOL_PAUSED
+        );
+
         assert!(campaign.owner == tx_context::sender(ctx), E_NOT_OWNER);
         assert!(campaign.status == CampaignStatus::ACTIVE, E_INVALID_STATE);
 
         let old = campaign.status;
         campaign.status = CampaignStatus::PAUSED;
 
-        sui::event::emit(CampaignStatusChanged {
+        event::emit(CampaignStatusChanged {
             campaign_id: object::id(campaign),
             old_status: status_to_u8(old),
             new_status: status_to_u8(campaign.status),
@@ -152,16 +169,22 @@ module healing_humanity::campaign_registry {
     }
 
     public fun resume_campaign(
+        cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
         ctx: &TxContext
     ) {
+        assert!(
+            !circuit_breaker::campaigns_paused(cb),
+            E_PROTOCOL_PAUSED
+        );
+
         assert!(campaign.owner == tx_context::sender(ctx), E_NOT_OWNER);
         assert!(campaign.status == CampaignStatus::PAUSED, E_INVALID_STATE);
 
         let old = campaign.status;
         campaign.status = CampaignStatus::ACTIVE;
 
-        sui::event::emit(CampaignStatusChanged {
+        event::emit(CampaignStatusChanged {
             campaign_id: object::id(campaign),
             old_status: status_to_u8(old),
             new_status: status_to_u8(campaign.status),
@@ -174,12 +197,13 @@ module healing_humanity::campaign_registry {
     public fun revoke_campaign(
         campaign: &mut Campaign
     ) {
+        // Compliance must remain functional during incidents
         assert!(campaign.status != CampaignStatus::REVOKED, E_INVALID_STATE);
 
         let old = campaign.status;
         campaign.status = CampaignStatus::REVOKED;
 
-        sui::event::emit(CampaignStatusChanged {
+        event::emit(CampaignStatusChanged {
             campaign_id: object::id(campaign),
             old_status: status_to_u8(old),
             new_status: status_to_u8(campaign.status),
