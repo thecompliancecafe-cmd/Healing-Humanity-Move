@@ -6,6 +6,7 @@ module healing_humanity::milestone_escrow {
     use healing_humanity::protocol_fees;
     use healing_humanity::treasury;
     use healing_humanity::treasury::Treasury;
+    use healing_humanity::circuit_breaker;
 
     /// ------------------------
     /// Errors
@@ -15,6 +16,7 @@ module healing_humanity::milestone_escrow {
     const E_MILESTONE_ALREADY_RELEASED: u64 = 2;
     const E_INSUFFICIENT_BALANCE: u64 = 3;
     const E_ESCROW_CLOSED: u64 = 4;
+    const E_ESCROW_PAUSED: u64 = 5;
 
     /// ------------------------
     /// Milestone State
@@ -92,9 +94,15 @@ module healing_humanity::milestone_escrow {
     /// Deposit funds
     /// ------------------------
     public fun deposit(
+        cb: &circuit_breaker::CircuitBreaker,
         vault: &mut Vault,
         coin: Coin<sui::sui::SUI>
     ) {
+        assert!(
+            !circuit_breaker::escrow_paused(cb),
+            E_ESCROW_PAUSED
+        );
+
         assert!(!vault.closed, E_ESCROW_CLOSED);
 
         balance::join(
@@ -107,6 +115,8 @@ module healing_humanity::milestone_escrow {
     /// Release milestone
     /// ------------------------
     public fun release_milestone(
+        cb: &circuit_breaker::CircuitBreaker,
+        fee_config: &protocol_fees::ProtocolFeeConfig,
         cap: &EscrowCap,
         vault: &mut Vault,
         milestone_id: u64,
@@ -114,6 +124,11 @@ module healing_humanity::milestone_escrow {
         treasury: &mut Treasury,
         ctx: &mut TxContext
     ) {
+        assert!(
+            !circuit_breaker::escrow_paused(cb),
+            E_ESCROW_PAUSED
+        );
+
         assert!(!vault.closed, E_ESCROW_CLOSED);
         assert!(cap.campaign_id == vault.campaign_id, E_CAMPAIGN_MISMATCH);
 
@@ -134,12 +149,16 @@ module healing_humanity::milestone_escrow {
         // Protocol Fee Calculation
         // -----------------------------
 
-        let fee = protocol_fees::compute_fee(amount, vault.tier);
+        let fee = protocol_fees::compute_fee(
+            fee_config,
+            amount,
+            vault.tier
+        );
 
-        // Split full milestone amount from vault
+        // Split full milestone amount
         let mut milestone_balance = balance::split(&mut vault.balance, amount);
 
-        // Split fee portion
+        // Split fee
         let fee_balance = balance::split(&mut milestone_balance, fee);
 
         milestone.released = true;
@@ -170,9 +189,15 @@ module healing_humanity::milestone_escrow {
     /// Close escrow
     /// ------------------------
     public fun close(
+        cb: &circuit_breaker::CircuitBreaker,
         cap: &EscrowCap,
         vault: &mut Vault
     ) {
+        assert!(
+            !circuit_breaker::escrow_paused(cb),
+            E_ESCROW_PAUSED
+        );
+
         assert!(cap.campaign_id == vault.campaign_id, E_CAMPAIGN_MISMATCH);
         vault.closed = true;
     }
