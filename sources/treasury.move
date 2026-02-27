@@ -4,11 +4,14 @@ module healing_humanity::treasury {
     use sui::coin::{Self, Coin};
     use sui::event;
 
+    use healing_humanity::circuit_breaker;
+
     /// =========================
     /// ERRORS
     /// =========================
     const E_INVALID_AMOUNT: u64 = 0;
     const E_WRONG_TREASURY: u64 = 1;
+    const E_WITHDRAWALS_PAUSED: u64 = 2;
 
     /// =========================
     /// EVENTS
@@ -37,7 +40,6 @@ module healing_humanity::treasury {
         balance: balance::Balance<sui::sui::SUI>,
     }
 
-    /// Admin capability bound to a specific treasury
     public struct TreasuryCap has key {
         id: sui::object::UID,
         treasury_id: sui::object::ID,
@@ -48,7 +50,7 @@ module healing_humanity::treasury {
     /// =========================
     public fun create(
         initial_coin: Coin<sui::sui::SUI>,
-        ctx: &mut sui::tx_context::TxContext
+        ctx: &mut TxContext
     ): TreasuryCap {
 
         let initial_amount = coin::value(&initial_coin);
@@ -65,11 +67,10 @@ module healing_humanity::treasury {
             treasury_id,
         };
 
-        // Share treasury
         sui::transfer::share_object(treasury);
 
         event::emit(TreasuryCreatedEvent {
-            creator: sui::tx_context::sender(ctx),
+            creator: tx_context::sender(ctx),
             treasury_id,
             initial_amount
         });
@@ -78,7 +79,7 @@ module healing_humanity::treasury {
     }
 
     /// =========================
-    /// INTERNAL TREASURY MATCH CHECK
+    /// INTERNAL CHECK
     /// =========================
     fun assert_correct_treasury(
         cap: &TreasuryCap,
@@ -91,12 +92,12 @@ module healing_humanity::treasury {
     }
 
     /// =========================
-    /// DEPOSIT (OPEN TO ANYONE)
+    /// DEPOSIT (OPEN)
     /// =========================
     public fun deposit(
         treasury: &mut Treasury,
         coin_in: Coin<sui::sui::SUI>,
-        ctx: &sui::tx_context::TxContext
+        ctx: &TxContext
     ) {
         let amount = coin::value(&coin_in);
         assert!(amount > 0, E_INVALID_AMOUNT);
@@ -105,24 +106,29 @@ module healing_humanity::treasury {
         balance::join(&mut treasury.balance, bal);
 
         event::emit(TreasuryDepositEvent {
-            sender: sui::tx_context::sender(ctx),
+            sender: tx_context::sender(ctx),
             amount
         });
     }
 
     /// =========================
-    /// WITHDRAW (CAP REQUIRED)
+    /// WITHDRAW (CB PROTECTED)
     /// =========================
     public fun withdraw(
         cap: &TreasuryCap,
         treasury: &mut Treasury,
+        cb: &circuit_breaker::CircuitBreaker,
         amount: u64,
         recipient: address,
-        ctx: &mut sui::tx_context::TxContext
+        ctx: &mut TxContext
     ) {
+        assert!(
+            !circuit_breaker::withdrawals_paused(cb),
+            E_WITHDRAWALS_PAUSED
+        );
+
         assert!(amount > 0, E_INVALID_AMOUNT);
 
-        // Ensure cap matches treasury
         assert_correct_treasury(cap, treasury);
 
         let bal = balance::split(&mut treasury.balance, amount);
