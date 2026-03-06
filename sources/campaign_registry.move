@@ -5,6 +5,7 @@ module healing_humanity::campaign_registry {
 
     use healing_humanity::protocol_fees;
     use healing_humanity::circuit_breaker;
+    use healing_humanity::protocol_governance;
 
     /// -----------------------------
     /// Errors
@@ -91,6 +92,7 @@ module healing_humanity::campaign_registry {
     /// Create + register campaign
     /// -----------------------------
     public fun create_campaign(
+        cfg: &protocol_governance::ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         registry: &mut CampaignRegistry,
         name: vector<u8>,
@@ -98,7 +100,11 @@ module healing_humanity::campaign_registry {
         tier: u8,
         ctx: &mut TxContext
     ) {
-        // Circuit breaker check (campaign-specific)
+
+        // Governance global pause check
+        protocol_governance::assert_protocol_active(cfg);
+
+        // Circuit breaker check
         assert!(
             !circuit_breaker::campaigns_paused(cb),
             E_PROTOCOL_PAUSED
@@ -145,11 +151,14 @@ module healing_humanity::campaign_registry {
     /// Owner controls
     /// -----------------------------
     public fun pause_campaign(
+        cfg: &protocol_governance::ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
         ctx: &TxContext
     ) {
-        // Campaign-level pause enforcement
+
+        protocol_governance::assert_protocol_active(cfg);
+
         assert!(
             !circuit_breaker::campaigns_paused(cb),
             E_PROTOCOL_PAUSED
@@ -169,10 +178,14 @@ module healing_humanity::campaign_registry {
     }
 
     public fun resume_campaign(
+        cfg: &protocol_governance::ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
         ctx: &TxContext
     ) {
+
+        protocol_governance::assert_protocol_active(cfg);
+
         assert!(
             !circuit_breaker::campaigns_paused(cb),
             E_PROTOCOL_PAUSED
@@ -197,7 +210,7 @@ module healing_humanity::campaign_registry {
     public fun revoke_campaign(
         campaign: &mut Campaign
     ) {
-        // Compliance must remain functional during incidents
+
         assert!(campaign.status != CampaignStatus::REVOKED, E_INVALID_STATE);
 
         let old = campaign.status;
