@@ -7,6 +7,8 @@ module healing_humanity::milestone_escrow {
     use healing_humanity::treasury;
     use healing_humanity::treasury::Treasury;
     use healing_humanity::circuit_breaker;
+    use healing_humanity::protocol_governance;
+    use healing_humanity::protocol_governance::ProtocolConfig;
 
     /// ------------------------
     /// Errors
@@ -51,12 +53,16 @@ module healing_humanity::milestone_escrow {
     /// Create escrow
     /// ------------------------
     public fun create(
+        cfg: &ProtocolConfig,
         campaign_id: ID,
         tier: u8,
         initial_coin: Coin<sui::sui::SUI>,
         milestone_amounts: vector<u64>,
         ctx: &mut TxContext
     ) {
+
+        protocol_governance::assert_protocol_active(cfg);
+
         let balance = coin::into_balance(initial_coin);
         let mut milestones = vector::empty<Milestone>();
 
@@ -94,10 +100,14 @@ module healing_humanity::milestone_escrow {
     /// Deposit funds
     /// ------------------------
     public fun deposit(
+        cfg: &ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         vault: &mut Vault,
         coin: Coin<sui::sui::SUI>
     ) {
+
+        protocol_governance::assert_protocol_active(cfg);
+
         assert!(
             !circuit_breaker::escrow_paused(cb),
             E_ESCROW_PAUSED
@@ -115,6 +125,7 @@ module healing_humanity::milestone_escrow {
     /// Release milestone
     /// ------------------------
     public fun release_milestone(
+        cfg: &ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         fee_config: &protocol_fees::ProtocolFeeConfig,
         cap: &EscrowCap,
@@ -124,6 +135,9 @@ module healing_humanity::milestone_escrow {
         treasury: &mut Treasury,
         ctx: &mut TxContext
     ) {
+
+        protocol_governance::assert_protocol_active(cfg);
+
         assert!(
             !circuit_breaker::escrow_paused(cb),
             E_ESCROW_PAUSED
@@ -170,6 +184,7 @@ module healing_humanity::milestone_escrow {
         let fee_coin = coin::from_balance(fee_balance, ctx);
 
         treasury::deposit(
+            cfg,
             treasury,
             fee_coin,
             ctx
@@ -189,16 +204,21 @@ module healing_humanity::milestone_escrow {
     /// Close escrow
     /// ------------------------
     public fun close(
+        cfg: &ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         cap: &EscrowCap,
         vault: &mut Vault
     ) {
+
+        protocol_governance::assert_protocol_active(cfg);
+
         assert!(
             !circuit_breaker::escrow_paused(cb),
             E_ESCROW_PAUSED
         );
 
         assert!(cap.campaign_id == vault.campaign_id, E_CAMPAIGN_MISMATCH);
+
         vault.closed = true;
     }
 }
