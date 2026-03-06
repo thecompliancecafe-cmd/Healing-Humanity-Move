@@ -5,6 +5,7 @@ module healing_humanity::treasury {
     use sui::event;
 
     use healing_humanity::circuit_breaker;
+    use healing_humanity::protocol_governance;
 
     /// =========================
     /// ERRORS
@@ -12,6 +13,7 @@ module healing_humanity::treasury {
     const E_INVALID_AMOUNT: u64 = 0;
     const E_WRONG_TREASURY: u64 = 1;
     const E_WITHDRAWALS_PAUSED: u64 = 2;
+    const E_INVALID_RECIPIENT: u64 = 3;
 
     /// =========================
     /// EVENTS
@@ -95,10 +97,15 @@ module healing_humanity::treasury {
     /// DEPOSIT (OPEN)
     /// =========================
     public fun deposit(
+        cfg: &protocol_governance::ProtocolConfig,
         treasury: &mut Treasury,
         coin_in: Coin<sui::sui::SUI>,
         ctx: &TxContext
     ) {
+
+        // Respect global protocol pause
+        protocol_governance::assert_protocol_active(cfg);
+
         let amount = coin::value(&coin_in);
         assert!(amount > 0, E_INVALID_AMOUNT);
 
@@ -112,9 +119,10 @@ module healing_humanity::treasury {
     }
 
     /// =========================
-    /// WITHDRAW (CB PROTECTED)
+    /// WITHDRAW (CB + GOV)
     /// =========================
     public fun withdraw(
+        cfg: &protocol_governance::ProtocolConfig,
         cap: &TreasuryCap,
         treasury: &mut Treasury,
         cb: &circuit_breaker::CircuitBreaker,
@@ -122,6 +130,11 @@ module healing_humanity::treasury {
         recipient: address,
         ctx: &mut TxContext
     ) {
+
+        // Respect global protocol pause
+        protocol_governance::assert_protocol_active(cfg);
+
+        // Circuit breaker protection
         assert!(
             !circuit_breaker::withdrawals_paused(cb),
             E_WITHDRAWALS_PAUSED
@@ -130,6 +143,11 @@ module healing_humanity::treasury {
         assert!(amount > 0, E_INVALID_AMOUNT);
 
         assert_correct_treasury(cap, treasury);
+
+        // Only allow withdrawals to governance treasury address
+        let treasury_addr = protocol_governance::treasury(cfg);
+
+        assert!(recipient == treasury_addr, E_INVALID_RECIPIENT);
 
         let bal = balance::split(&mut treasury.balance, amount);
         let coin_out = coin::from_balance(bal, ctx);
