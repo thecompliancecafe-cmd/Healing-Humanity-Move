@@ -1,20 +1,35 @@
 module healing_humanity::compliance {
-    use sui::table;
 
+    use sui::table::{Self, Table};
+
+    use healing_humanity::identity;
+    use healing_humanity::identity::Identity;
+
+    /// -----------------------------
+    /// Errors
+    /// -----------------------------
+    const E_IDENTITY_INACTIVE: u64 = 0;
+
+    /// -----------------------------
     /// Shared compliance registry
+    /// -----------------------------
     public struct ComplianceRegistry has key {
-        id: object::UID,
-        approved: table::Table<address, bool>,
+        id: UID,
+        approved: Table<ID, bool>,
     }
 
-    /// Admin capability for compliance approvals
+    /// -----------------------------
+    /// Admin capability
+    /// -----------------------------
     public struct ComplianceAdminCap has key {
-        id: object::UID,
+        id: UID,
     }
 
-    /// Package initialization (runs once at publish)
-    /// NOTE: init must be internal and return ()
-    fun init(ctx: &mut tx_context::TxContext) {
+    /// -----------------------------
+    /// Package initialization
+    /// -----------------------------
+    fun init(ctx: &mut TxContext) {
+
         let registry = ComplianceRegistry {
             id: object::new(ctx),
             approved: table::new(ctx),
@@ -31,22 +46,53 @@ module healing_humanity::compliance {
         transfer::transfer(admin_cap, tx_context::sender(ctx));
     }
 
-    /// Approve an address as compliant (admin only)
+    /// -----------------------------
+    /// Approve an identity as compliant
+    /// -----------------------------
     public fun approve(
         _admin: &ComplianceAdminCap,
         reg: &mut ComplianceRegistry,
-        addr: address
+        identity_obj: &Identity
     ) {
-        if (!table::contains(&reg.approved, addr)) {
-            table::add(&mut reg.approved, addr, true);
+
+        // Ensure identity is active
+        assert!(
+            identity::is_active(identity_obj),
+            E_IDENTITY_INACTIVE
+        );
+
+        let id = object::id(identity_obj);
+
+        if (!table::contains(&reg.approved, id)) {
+            table::add(&mut reg.approved, id, true);
         }
     }
 
-    /// Check if an address is compliant
+    /// -----------------------------
+    /// Check if identity is compliant
+    /// -----------------------------
     public fun is_compliant(
         reg: &ComplianceRegistry,
-        addr: address
+        identity_obj: &Identity
     ): bool {
-        table::contains(&reg.approved, addr)
+
+        table::contains(
+            &reg.approved,
+            object::id(identity_obj)
+        )
+    }
+
+    /// -----------------------------
+    /// Wallet helper
+    /// -----------------------------
+    public fun wallet_is_compliant(
+        reg: &ComplianceRegistry,
+        identity_obj: &Identity
+    ): bool {
+
+        table::contains(
+            &reg.approved,
+            object::id(identity_obj)
+        )
     }
 }
