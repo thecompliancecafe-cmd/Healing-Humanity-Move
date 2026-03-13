@@ -9,6 +9,7 @@ module healing_humanity::milestone_escrow {
     use healing_humanity::circuit_breaker;
     use healing_humanity::protocol_governance;
     use healing_humanity::protocol_governance::ProtocolConfig;
+    use healing_humanity::identity;
 
     /// ------------------------
     /// Errors
@@ -19,6 +20,7 @@ module healing_humanity::milestone_escrow {
     const E_INSUFFICIENT_BALANCE: u64 = 3;
     const E_ESCROW_CLOSED: u64 = 4;
     const E_ESCROW_PAUSED: u64 = 5;
+    const E_IDENTITY_INACTIVE: u64 = 6;
 
     /// ------------------------
     /// Milestone State
@@ -35,6 +37,7 @@ module healing_humanity::milestone_escrow {
     public struct Vault has key {
         id: UID,
         campaign_id: ID,
+        campaign_owner_identity: ID,
         tier: u8,
         balance: Balance<sui::sui::SUI>,
         milestones: vector<Milestone>,
@@ -47,6 +50,7 @@ module healing_humanity::milestone_escrow {
     public struct EscrowCap has key {
         id: UID,
         campaign_id: ID,
+        owner_identity: ID,
     }
 
     /// ------------------------
@@ -55,6 +59,7 @@ module healing_humanity::milestone_escrow {
     public fun create(
         cfg: &ProtocolConfig,
         campaign_id: ID,
+        campaign_owner_identity: &identity::Identity,
         tier: u8,
         initial_coin: Coin<sui::sui::SUI>,
         milestone_amounts: vector<u64>,
@@ -63,6 +68,12 @@ module healing_humanity::milestone_escrow {
 
         protocol_governance::assert_protocol_active(cfg);
 
+        // Ensure campaign identity is active
+        assert!(
+            identity::is_active(campaign_owner_identity),
+            E_IDENTITY_INACTIVE
+        );
+
         let balance = coin::into_balance(initial_coin);
         let mut milestones = vector::empty<Milestone>();
 
@@ -70,17 +81,25 @@ module healing_humanity::milestone_escrow {
         let len = vector::length(&milestone_amounts);
 
         while (i < len) {
+
             let amt = *vector::borrow(&milestone_amounts, i);
+
             vector::push_back(
                 &mut milestones,
-                Milestone { id: i, amount: amt, released: false }
+                Milestone {
+                    id: i,
+                    amount: amt,
+                    released: false
+                }
             );
+
             i = i + 1;
         };
 
         let vault = Vault {
             id: object::new(ctx),
             campaign_id,
+            campaign_owner_identity: object::id(campaign_owner_identity),
             tier,
             balance,
             milestones,
@@ -90,6 +109,7 @@ module healing_humanity::milestone_escrow {
         let cap = EscrowCap {
             id: object::new(ctx),
             campaign_id,
+            owner_identity: object::id(campaign_owner_identity),
         };
 
         transfer::share_object(vault);
@@ -131,7 +151,7 @@ module healing_humanity::milestone_escrow {
         cap: &EscrowCap,
         vault: &mut Vault,
         milestone_id: u64,
-        recipient: address,
+        recipient_identity: &identity::Identity,
         treasury: &mut Treasury,
         ctx: &mut TxContext
     ) {
@@ -144,13 +164,32 @@ module healing_humanity::milestone_escrow {
         );
 
         assert!(!vault.closed, E_ESCROW_CLOSED);
-        assert!(cap.campaign_id == vault.campaign_id, E_CAMPAIGN_MISMATCH);
+
+        assert!(
+            cap.campaign_id == vault.campaign_id,
+            E_CAMPAIGN_MISMATCH
+        );
+
+        // Ensure recipient identity is active
+        assert!(
+            identity::is_active(recipient_identity),
+            E_IDENTITY_INACTIVE
+        );
 
         let len = vector::length(&vault.milestones);
-        assert!(milestone_id < len, E_MILESTONE_INVALID);
 
-        let milestone = vector::borrow_mut(&mut vault.milestones, milestone_id);
-        assert!(!milestone.released, E_MILESTONE_ALREADY_RELEASED);
+        assert!(
+            milestone_id < len,
+            E_MILESTONE_INVALID
+        );
+
+        let milestone =
+            vector::borrow_mut(&mut vault.milestones, milestone_id);
+
+        assert!(
+            !milestone.released,
+            E_MILESTONE_ALREADY_RELEASED
+        );
 
         let amount = milestone.amount;
 
@@ -170,10 +209,12 @@ module healing_humanity::milestone_escrow {
         );
 
         // Split full milestone amount
-        let mut milestone_balance = balance::split(&mut vault.balance, amount);
+        let mut milestone_balance =
+            balance::split(&mut vault.balance, amount);
 
         // Split fee
-        let fee_balance = balance::split(&mut milestone_balance, fee);
+        let fee_balance =
+            balance::split(&mut milestone_balance, fee);
 
         milestone.released = true;
 
@@ -181,7 +222,8 @@ module healing_humanity::milestone_escrow {
         // Deposit fee into Treasury
         // -----------------------------
 
-        let fee_coin = coin::from_balance(fee_balance, ctx);
+        let fee_coin =
+            coin::from_balance(fee_balance, ctx);
 
         treasury::deposit(
             cfg,
@@ -194,9 +236,12 @@ module healing_humanity::milestone_escrow {
         // Send net amount to recipient
         // -----------------------------
 
+        let recipient_wallet =
+            identity::get_owner(recipient_identity);
+
         transfer::public_transfer(
             coin::from_balance(milestone_balance, ctx),
-            recipient
+            recipient_wallet
         );
     }
 
@@ -217,7 +262,10 @@ module healing_humanity::milestone_escrow {
             E_ESCROW_PAUSED
         );
 
-        assert!(cap.campaign_id == vault.campaign_id, E_CAMPAIGN_MISMATCH);
+        assert!(
+            cap.campaign_id == vault.campaign_id,
+            E_CAMPAIGN_MISMATCH
+        );
 
         vault.closed = true;
     }
