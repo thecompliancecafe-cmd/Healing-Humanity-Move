@@ -1,15 +1,13 @@
 module healing_humanity::ai_attestation {
 
-    use std::string::String;
+    use std::string;
     use sui::event;
 
-    use healing_humanity::ai_oracle::{Self, OracleRegistry};
     use healing_humanity::identity::{Self, Identity};
 
     /// -----------------------------
     /// Errors
     /// -----------------------------
-    const E_NOT_ORACLE: u64 = 0;
     const E_IDENTITY_INACTIVE: u64 = 1;
     const E_INVALID_ROLE: u64 = 2;
     const E_IDENTITY_NOT_VERIFIED: u64 = 3;
@@ -18,61 +16,44 @@ module healing_humanity::ai_attestation {
     /// AI Attestation Object
     /// -----------------------------
     public struct Attestation has key {
-        id: UID,
-        campaign_id: ID,
+        id: object::UID,
+        campaign_id: object::ID,
         milestone: u64,
-        hash: String,
-        oracle_identity: ID,
+        hash: string::String,
+        oracle_identity: object::ID,
         oracle_wallet: address,
     }
 
     /// -----------------------------
-    /// Event: Attestation Submitted
+    /// Event
     /// -----------------------------
     public struct AttestationSubmitted has copy, drop {
-        campaign_id: ID,
+        campaign_id: object::ID,
         milestone: u64,
-        oracle_identity: ID,
+        oracle_identity: object::ID,
         oracle_wallet: address,
     }
 
     /// -----------------------------
-    /// Submit AI Attestation
+    /// INTERNAL: Submit Attestation
     /// -----------------------------
-    public fun submit(
-        registry: &OracleRegistry,
+    public(package) fun submit_internal(
         oracle_identity: &Identity,
-        campaign_id: ID,
+        campaign_id: object::ID,
         milestone: u64,
-        hash: String,
-        ctx: &mut TxContext
+        hash: string::String,
+        ctx: &mut tx_context::TxContext
     ): Attestation {
 
         let sender = tx_context::sender(ctx);
 
-        // Identity must be active
-        assert!(
-            identity::is_active(oracle_identity),
-            E_IDENTITY_INACTIVE
-        );
+        assert!(identity::is_active(oracle_identity), E_IDENTITY_INACTIVE);
+        assert!(identity::is_verified(oracle_identity), E_IDENTITY_NOT_VERIFIED);
 
-        // Identity must be verified
-        assert!(
-            identity::is_verified(oracle_identity),
-            E_IDENTITY_NOT_VERIFIED
-        );
-
-        // Only AI agent or Oracle role allowed
         assert!(
             identity::is_ai(oracle_identity) ||
             identity::get_role(oracle_identity) == 5,
             E_INVALID_ROLE
-        );
-
-        // Oracle registry validation
-        assert!(
-            ai_oracle::is_oracle(registry, oracle_identity, sender),
-            E_NOT_ORACLE
         );
 
         let attestation = Attestation {
@@ -97,8 +78,7 @@ module healing_humanity::ai_attestation {
     /// -----------------------------
     /// Read Helpers
     /// -----------------------------
-
-    public fun oracle_identity_of(att: &Attestation): ID {
+    public fun oracle_identity_of(att: &Attestation): object::ID {
         att.oracle_identity
     }
 
@@ -110,7 +90,7 @@ module healing_humanity::ai_attestation {
         att.milestone
     }
 
-    public fun campaign_of(att: &Attestation): ID {
+    public fun campaign_of(att: &Attestation): object::ID {
         att.campaign_id
     }
 }
