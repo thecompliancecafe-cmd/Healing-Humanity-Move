@@ -1,67 +1,116 @@
 module healing_humanity::reputation {
 
+    use sui::table;
+
     use healing_humanity::identity;
     use healing_humanity::identity::Identity;
 
-    /// -----------------------------
-    /// Errors
-    /// -----------------------------
     const E_IDENTITY_INACTIVE: u64 = 0;
+    const E_NOT_FOUND: u64 = 1;
 
     /// -----------------------------
-    /// Soulbound reputation / XP object
-    /// Non-transferable by design
+    /// XP Struct (NOT key anymore)
     /// -----------------------------
-    public struct XP has key {
-        id: UID,
-
-        /// Identity that owns the reputation
-        owner_identity: ID,
-
-        /// Wallet for reference / indexing
+    public struct XP has store {
+        owner_identity: object::ID,
         owner_wallet: address,
-
-        /// Experience points
         xp: u64,
     }
 
     /// -----------------------------
-    /// Award XP to an identity
-    /// XP objects remain soulbound
+    /// GLOBAL REGISTRY
     /// -----------------------------
-    public fun award(
-        identity: &Identity,
-        xp: u64,
-        ctx: &mut TxContext
-    ): XP {
+    public struct XPRegistry has key {
+        id: object::UID,
+        profiles: table::Table<object::ID, XP>,
+    }
 
-        // Ensure identity is active
-        assert!(
-            identity::is_active(identity),
-            E_IDENTITY_INACTIVE
-        );
-
-        XP {
+    /// -----------------------------
+    /// Init registry
+    /// -----------------------------
+    fun init(ctx: &mut tx_context::TxContext) {
+        let registry = XPRegistry {
             id: object::new(ctx),
-            owner_identity: object::id(identity),
+            profiles: table::new(ctx),
+        };
+
+        transfer::share_object(registry);
+    }
+
+    /// -----------------------------
+    /// Create profile (once)
+    /// -----------------------------
+    public fun create_profile(
+        registry: &mut XPRegistry,
+        identity: &Identity,
+        ctx: &mut tx_context::TxContext
+    ) {
+        assert!(identity::is_active(identity), E_IDENTITY_INACTIVE);
+
+        let id = object::id(identity);
+
+        let xp = XP {
+            owner_identity: id,
             owner_wallet: identity::get_owner(identity),
-            xp,
-        }
+            xp: 0,
+        };
+
+        table::add(&mut registry.profiles, id, xp);
     }
 
     /// -----------------------------
-    /// Read Helpers
+    /// Add XP
     /// -----------------------------
+    public fun add_xp(
+        registry: &mut XPRegistry,
+        identity: &Identity,
+        amount: u64
+    ) {
+        let id = object::id(identity);
 
-    public fun identity_of(xp: &XP): ID {
-        xp.owner_identity
+        assert!(table::contains(&registry.profiles, id), E_NOT_FOUND);
+
+        let xp = table::borrow_mut(&mut registry.profiles, id);
+
+        xp.xp = xp.xp + amount;
     }
 
-    public fun wallet_of(xp: &XP): address {
-        xp.owner_wallet
+    /// -----------------------------
+    /// Slash XP (SAFE)
+    /// -----------------------------
+    public fun slash_xp(
+        registry: &mut XPRegistry,
+        identity: &Identity,
+        amount: u64
+    ) {
+        let id = object::id(identity);
+
+        assert!(table::contains(&registry.profiles, id), E_NOT_FOUND);
+
+        let xp = table::borrow_mut(&mut registry.profiles, id);
+
+        if (xp.xp > amount) {
+            xp.xp = xp.xp - amount;
+        } else {
+            xp.xp = 0;
+        };
     }
 
-    public fun value(xp: &XP): u64 {
+    /// -----------------------------
+    /// Get XP
+    /// -----------------------------
+    public fun get_xp(
+        registry: &XPRegistry,
+        identity: &Identity
+    ): u64 {
+        let id = object::id(identity);
+
+        if (!table::contains(&registry.profiles, id)) {
+            return 0
+        };
+
+        let xp = table::borrow(&registry.profiles, id);
+
         xp.xp
     }
 }
