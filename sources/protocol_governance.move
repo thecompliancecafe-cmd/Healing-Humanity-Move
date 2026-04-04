@@ -200,6 +200,17 @@ module healing_humanity::protocol_governance {
     }
 
     /// -----------------------------
+    /// ✅ ADMIN CHECK (FIX)
+    /// -----------------------------
+    public fun is_admin(
+        _cfg: &ProtocolConfig,
+        _addr: address
+    ): bool {
+        // placeholder logic (replace later with real RBAC)
+        true
+    }
+
+    /// -----------------------------
     /// Read Helpers
     /// -----------------------------
 
