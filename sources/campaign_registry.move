@@ -1,11 +1,12 @@
 module healing_humanity::campaign_registry {
 
     use sui::table::{Self, Table};
-    use sui::event;
+    use sui::clock::Clock;
 
     use healing_humanity::protocol_fees;
     use healing_humanity::circuit_breaker;
     use healing_humanity::protocol_governance;
+    use healing_humanity::events;
 
     /// -----------------------------
     /// Errors
@@ -16,6 +17,9 @@ module healing_humanity::campaign_registry {
     const E_ALREADY_REGISTERED: u64 = 3;
     const E_INVALID_TIER: u64 = 4;
     const E_PROTOCOL_PAUSED: u64 = 5;
+    const E_NOT_AUTHORIZED: u64 = 6;
+    const E_ESCROW_ALREADY_SET: u64 = 7;
+    const E_ESCROW_MISMATCH: u64 = 8;
 
     /// -----------------------------
     /// Campaign lifecycle
@@ -29,43 +33,29 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// Events
-    /// -----------------------------
-    public struct CampaignCreated has copy, drop {
-        campaign_id: ID,
-        owner: address,
-        target: u64,
-        tier: u8,
-    }
-
-    public struct CampaignStatusChanged has copy, drop {
-        campaign_id: ID,
-        old_status: u8,
-        new_status: u8,
-    }
-
-    /// -----------------------------
     /// Campaign object
     /// -----------------------------
     public struct Campaign has key {
-        id: UID,
+        id: object::UID,
         name: vector<u8>,
         target: u64,
+        raised: u64,
         owner: address,
         status: CampaignStatus,
         tier: u8,
+        escrow_id: option::Option<object::ID>,
     }
 
     /// -----------------------------
     /// Registry object
     /// -----------------------------
     public struct CampaignRegistry has key {
-        id: UID,
-        campaigns: Table<ID, bool>,
+        id: object::UID,
+        campaigns: Table<object::ID, address>,
     }
 
     /// -----------------------------
-    /// Internal helpers
+    /// Helpers
     /// -----------------------------
     fun status_to_u8(status: CampaignStatus): u8 {
         match (status) {
@@ -77,10 +67,23 @@ module healing_humanity::campaign_registry {
         }
     }
 
+    fun assert_valid_transition(old: CampaignStatus, _new: CampaignStatus) {
+        if (
+            (old == CampaignStatus::CREATED && _new == CampaignStatus::ACTIVE) ||
+            (old == CampaignStatus::ACTIVE && _new == CampaignStatus::PAUSED) ||
+            (old == CampaignStatus::PAUSED && _new == CampaignStatus::ACTIVE) ||
+            (old == CampaignStatus::ACTIVE && _new == CampaignStatus::COMPLETED) ||
+            (_new == CampaignStatus::REVOKED)
+        ) {
+            return;
+        };
+        abort E_INVALID_STATE;
+    }
+
     /// -----------------------------
-    /// Create global registry
+    /// Create registry
     /// -----------------------------
-    public fun create_registry(ctx: &mut TxContext) {
+    public fun create_registry(ctx: &mut tx_context::TxContext) {
         let registry = CampaignRegistry {
             id: object::new(ctx),
             campaigns: table::new(ctx),
@@ -89,7 +92,7 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// Create + register campaign
+    /// Create campaign
     /// -----------------------------
     public fun create_campaign(
         cfg: &protocol_governance::ProtocolConfig,
@@ -98,17 +101,12 @@ module healing_humanity::campaign_registry {
         name: vector<u8>,
         target: u64,
         tier: u8,
-        ctx: &mut TxContext
+        clock: &Clock,
+        ctx: &mut tx_context::TxContext
     ) {
 
-        // Governance global pause check
         protocol_governance::assert_protocol_active(cfg);
-
-        // Circuit breaker check
-        assert!(
-            !circuit_breaker::campaigns_paused(cb),
-            E_PROTOCOL_PAUSED
-        );
+        assert!(!circuit_breaker::campaigns_paused(cb), E_PROTOCOL_PAUSED);
 
         assert!(target > 0, E_INVALID_INPUT);
         assert!(!vector::is_empty(&name), E_INVALID_INPUT);
@@ -123,9 +121,11 @@ module healing_humanity::campaign_registry {
             id: object::new(ctx),
             name,
             target,
+            raised: 0,
             owner: tx_context::sender(ctx),
             status: CampaignStatus::ACTIVE,
             tier,
+            escrow_id: option::none(),
         };
 
         let campaign_id = object::id(&campaign);
@@ -135,16 +135,90 @@ module healing_humanity::campaign_registry {
             E_ALREADY_REGISTERED
         );
 
-        table::add(&mut registry.campaigns, campaign_id, true);
+        table::add(&mut registry.campaigns, campaign_id, campaign.owner);
 
-        event::emit(CampaignCreated {
+        events::emit_campaign_created(
             campaign_id,
-            owner: campaign.owner,
+            campaign.owner,
+            campaign.name,
             target,
-            tier,
-        });
+            clock
+        );
 
         transfer::share_object(campaign);
+    }
+
+    /// -----------------------------
+    /// 🔗 ESCROW INTEGRATION
+    /// -----------------------------
+    public fun link_escrow_internal(
+        campaign: &mut Campaign,
+        escrow_id: object::ID,
+        clock: &Clock
+    ) {
+        assert!(option::is_none(&campaign.escrow_id), E_ESCROW_ALREADY_SET);
+
+        campaign.escrow_id = option::some(escrow_id);
+
+        events::emit_campaign_escrow_linked(
+            object::id(campaign),
+            escrow_id,
+            clock
+        );
+    }
+
+    public fun add_funds_internal(
+        campaign: &mut Campaign,
+        escrow_id: object::ID,
+        amount: u64,
+        clock: &Clock
+    ) {
+        assert!(campaign.status == CampaignStatus::ACTIVE, E_INVALID_STATE);
+
+        let stored = &campaign.escrow_id;
+        assert!(option::is_some(stored), E_INVALID_STATE);
+
+        let stored_id = *option::borrow(stored);
+        assert!(stored_id == escrow_id, E_ESCROW_MISMATCH);
+
+        campaign.raised = campaign.raised + amount;
+
+        events::emit_campaign_funded(
+            object::id(campaign),
+            escrow_id,
+            amount,
+            campaign.raised,
+            clock
+        );
+    }
+
+    /// -----------------------------
+    /// 🧠 ORACLE / ESCROW COMPLETION
+    /// -----------------------------
+    public fun mark_completed_internal(
+        campaign: &mut Campaign,
+        escrow_id: object::ID,
+        clock: &Clock
+    ) {
+        let stored = &campaign.escrow_id;
+        assert!(option::is_some(stored), E_INVALID_STATE);
+
+        let stored_id = *option::borrow(stored);
+        assert!(stored_id == escrow_id, E_ESCROW_MISMATCH);
+
+        assert_valid_transition(campaign.status, CampaignStatus::COMPLETED);
+
+        let old = campaign.status;
+        campaign.status = CampaignStatus::COMPLETED;
+
+        events::emit_campaign_status_changed(
+            object::id(campaign),
+            status_to_u8(old),
+            status_to_u8(campaign.status),
+            @0x0,
+            b"completed",
+            clock
+        );
     }
 
     /// -----------------------------
@@ -154,94 +228,91 @@ module healing_humanity::campaign_registry {
         cfg: &protocol_governance::ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
-        ctx: &TxContext
+        clock: &Clock,
+        ctx: &tx_context::TxContext
     ) {
-
         protocol_governance::assert_protocol_active(cfg);
-
-        assert!(
-            !circuit_breaker::campaigns_paused(cb),
-            E_PROTOCOL_PAUSED
-        );
+        assert!(!circuit_breaker::campaigns_paused(cb), E_PROTOCOL_PAUSED);
 
         assert!(campaign.owner == tx_context::sender(ctx), E_NOT_OWNER);
-        assert!(campaign.status == CampaignStatus::ACTIVE, E_INVALID_STATE);
+        assert_valid_transition(campaign.status, CampaignStatus::PAUSED);
 
         let old = campaign.status;
         campaign.status = CampaignStatus::PAUSED;
 
-        event::emit(CampaignStatusChanged {
-            campaign_id: object::id(campaign),
-            old_status: status_to_u8(old),
-            new_status: status_to_u8(campaign.status),
-        });
+        events::emit_campaign_status_changed(
+            object::id(campaign),
+            status_to_u8(old),
+            status_to_u8(campaign.status),
+            tx_context::sender(ctx),
+            b"paused",
+            clock
+        );
     }
 
     public fun resume_campaign(
         cfg: &protocol_governance::ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
-        ctx: &TxContext
+        clock: &Clock,
+        ctx: &tx_context::TxContext
     ) {
-
         protocol_governance::assert_protocol_active(cfg);
-
-        assert!(
-            !circuit_breaker::campaigns_paused(cb),
-            E_PROTOCOL_PAUSED
-        );
+        assert!(!circuit_breaker::campaigns_paused(cb), E_PROTOCOL_PAUSED);
 
         assert!(campaign.owner == tx_context::sender(ctx), E_NOT_OWNER);
-        assert!(campaign.status == CampaignStatus::PAUSED, E_INVALID_STATE);
+        assert_valid_transition(campaign.status, CampaignStatus::ACTIVE);
 
         let old = campaign.status;
         campaign.status = CampaignStatus::ACTIVE;
 
-        event::emit(CampaignStatusChanged {
-            campaign_id: object::id(campaign),
-            old_status: status_to_u8(old),
-            new_status: status_to_u8(campaign.status),
-        });
+        events::emit_campaign_status_changed(
+            object::id(campaign),
+            status_to_u8(old),
+            status_to_u8(campaign.status),
+            tx_context::sender(ctx),
+            b"resumed",
+            clock
+        );
     }
 
     /// -----------------------------
-    /// Admin / compliance controls
+    /// Admin control
     /// -----------------------------
     public fun revoke_campaign(
-        campaign: &mut Campaign
+        cfg: &protocol_governance::ProtocolConfig,
+        campaign: &mut Campaign,
+        clock: &Clock,
+        ctx: &tx_context::TxContext
     ) {
+        assert!(
+            protocol_governance::is_admin(cfg, tx_context::sender(ctx)),
+            E_NOT_AUTHORIZED
+        );
 
         assert!(campaign.status != CampaignStatus::REVOKED, E_INVALID_STATE);
 
         let old = campaign.status;
         campaign.status = CampaignStatus::REVOKED;
 
-        event::emit(CampaignStatusChanged {
-            campaign_id: object::id(campaign),
-            old_status: status_to_u8(old),
-            new_status: status_to_u8(campaign.status),
-        });
+        events::emit_campaign_status_changed(
+            object::id(campaign),
+            status_to_u8(old),
+            status_to_u8(campaign.status),
+            tx_context::sender(ctx),
+            b"revoked",
+            clock
+        );
     }
 
     /// -----------------------------
-    /// Read-only helpers
+    /// Views
     /// -----------------------------
-    public fun exists(
-        registry: &CampaignRegistry,
-        campaign_id: ID
-    ): bool {
+    public fun exists(registry: &CampaignRegistry, campaign_id: object::ID): bool {
         table::contains(&registry.campaigns, campaign_id)
     }
 
-    public fun is_active(campaign: &Campaign): bool {
-        campaign.status == CampaignStatus::ACTIVE
-    }
-
-    public fun owner_of(campaign: &Campaign): address {
-        campaign.owner
-    }
-
-    public fun tier_of(campaign: &Campaign): u8 {
-        campaign.tier
+    public fun raised_of(campaign: &Campaign): u64 {
+        campaign.raised
     }
 }
