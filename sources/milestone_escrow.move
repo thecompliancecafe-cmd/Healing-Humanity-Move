@@ -19,9 +19,6 @@ module healing_humanity::milestone_escrow {
     use healing_humanity::campaign_registry;
     use healing_humanity::ledger;
 
-    /// ------------------------
-    /// Errors
-    /// ------------------------
     const E_CAMPAIGN_MISMATCH: u64 = 0;
     const E_MILESTONE_ALREADY_RELEASED: u64 = 2;
     const E_ESCROW_CLOSED: u64 = 4;
@@ -29,18 +26,12 @@ module healing_humanity::milestone_escrow {
     const E_IDENTITY_INACTIVE: u64 = 6;
     const E_ORACLE_NOT_APPROVED: u64 = 12;
 
-    /// ------------------------
-    /// Milestone
-    /// ------------------------
     public struct Milestone has store, drop {
         id: u64,
         amount: u64,
         released: bool,
     }
 
-    /// ------------------------
-    /// Vault
-    /// ------------------------
     public struct Vault has key {
         id: object::UID,
         campaign_id: object::ID,
@@ -53,18 +44,12 @@ module healing_humanity::milestone_escrow {
         round: u64,
     }
 
-    /// ------------------------
-    /// EscrowCap
-    /// ------------------------
     public struct EscrowCap has key {
         id: object::UID,
         campaign_id: object::ID,
         owner_identity: object::ID,
     }
 
-    /// ------------------------
-    /// Helpers
-    /// ------------------------
     fun all_released(vault: &Vault): bool {
         let mut i = 0;
         let len = vector::length(&vault.milestones);
@@ -78,9 +63,6 @@ module healing_humanity::milestone_escrow {
         true
     }
 
-    /// ------------------------
-    /// Create
-    /// ------------------------
     public fun create(
         cfg: &ProtocolConfig,
         campaign: &mut campaign_registry::Campaign,
@@ -155,9 +137,6 @@ module healing_humanity::milestone_escrow {
         transfer::transfer(cap, tx_context::sender(ctx));
     }
 
-    /// ------------------------
-    /// Deposit
-    /// ------------------------
     public fun deposit(
         cfg: &ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
@@ -200,9 +179,6 @@ module healing_humanity::milestone_escrow {
         );
     }
 
-    /// ------------------------
-    /// Release milestone
-    /// ------------------------
     public fun release_milestone(
         cfg: &ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
@@ -233,10 +209,14 @@ module healing_humanity::milestone_escrow {
 
         milestone.released = true;
 
+        let action_id = option::none<object::ID>();
+
+        // ✅ FIXED HERE
         treasury::deposit(
             cfg,
             treasury,
             coin::from_balance(fee_balance, ctx),
+            clock,
             ctx
         );
 
@@ -254,6 +234,7 @@ module healing_humanity::milestone_escrow {
             recipient_wallet,
             amount,
             fee,
+            action_id,
             clock
         );
 
@@ -275,9 +256,6 @@ module healing_humanity::milestone_escrow {
         }
     }
 
-    /// ------------------------
-    /// Oracle-Gated Release (MAIN PATH)
-    /// ------------------------
     public fun release_milestone_with_oracle(
         registry: &OracleRegistry,
         cfg: &ProtocolConfig,
@@ -318,9 +296,6 @@ module healing_humanity::milestone_escrow {
         );
     }
 
-    /// ------------------------
-    /// Close
-    /// ------------------------
     public fun close(
         cfg: &ProtocolConfig,
         cb: &circuit_breaker::CircuitBreaker,
