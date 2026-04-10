@@ -1,21 +1,25 @@
 module healing_humanity::identity {
 
-    use sui::event;
+    use sui::object;
+    use sui::tx_context;
+    use sui::transfer;
     use sui::clock::{Self, Clock};
+    use std::vector;
     use std::string::String;
+    use healing_humanity::events;
 
     /// -----------------------------
     /// Errors
     /// -----------------------------
-
     const E_IDENTITY_INACTIVE: u64 = 0;
     const E_NOT_OWNER: u64 = 1;
     const E_INVALID_ROLE: u64 = 2;
+    const E_NOT_VERIFIED: u64 = 3;
+    const E_NOT_AUTHORIZED: u64 = 4;
 
     /// -----------------------------
-    /// Role Definitions
+    /// Roles
     /// -----------------------------
-
     const ROLE_USER: u8 = 0;
     const ROLE_BUILDER: u8 = 1;
     const ROLE_ORGANIZATION: u8 = 2;
@@ -24,18 +28,16 @@ module healing_humanity::identity {
     const ROLE_ORACLE: u8 = 5;
 
     /// -----------------------------
-    /// Status Definitions
+    /// Status
     /// -----------------------------
-
     const STATUS_ACTIVE: u8 = 0;
     const STATUS_SUSPENDED: u8 = 1;
 
     /// -----------------------------
     /// Identity Object
     /// -----------------------------
-
     public struct Identity has key {
-        id: UID,
+        id: object::UID,
         owner: address,
         name: String,
         role: u8,
@@ -48,56 +50,24 @@ module healing_humanity::identity {
     }
 
     /// -----------------------------
-    /// Identity Registry
+    /// Registry
     /// -----------------------------
-
     public struct IdentityRegistry has key {
-        id: UID,
+        id: object::UID,
         total_identities: u64
     }
 
     /// -----------------------------
-    /// Admin Capability
+    /// Admin Cap
     /// -----------------------------
-
     public struct IdentityAdminCap has key {
-        id: UID
+        id: object::UID
     }
 
     /// -----------------------------
-    /// Events
+    /// Init
     /// -----------------------------
-
-    public struct IdentityCreated has copy, drop {
-        identity_id: ID,
-        owner: address,
-        role: u8,
-        timestamp: u64
-    }
-
-    public struct IdentityVerified has copy, drop {
-        identity_id: ID,
-        verifier: address,
-        timestamp: u64
-    }
-
-    public struct IdentityRoleUpdated has copy, drop {
-        identity_id: ID,
-        old_role: u8,
-        new_role: u8
-    }
-
-    public struct IdentitySuspended has copy, drop {
-        identity_id: ID,
-        timestamp: u64
-    }
-
-    /// -----------------------------
-    /// Initialize Registry
-    /// -----------------------------
-
-    fun init(ctx: &mut TxContext) {
-
+    fun init(ctx: &mut tx_context::TxContext) {
         let registry = IdentityRegistry {
             id: object::new(ctx),
             total_identities: 0
@@ -114,16 +84,14 @@ module healing_humanity::identity {
     /// -----------------------------
     /// Create Identity
     /// -----------------------------
-
-    public entry fun create_identity(
+    public fun create_identity(
         registry: &mut IdentityRegistry,
         name: String,
         role: u8,
         metadata_url: vector<u8>,
-        clock: &Clock,
-        ctx: &mut TxContext
+        clock_ref: &Clock,
+        ctx: &mut tx_context::TxContext
     ) {
-
         assert!(role <= ROLE_ORACLE, E_INVALID_ROLE);
 
         let sender = tx_context::sender(ctx);
@@ -136,19 +104,22 @@ module healing_humanity::identity {
             status: STATUS_ACTIVE,
             verified: false,
             reputation_score: 0,
-            created_at: clock::timestamp_ms(clock),
+            created_at: clock::timestamp_ms(clock_ref),
             metadata_url,
             delegates: vector::empty<address>()
         };
 
         registry.total_identities = registry.total_identities + 1;
 
-        event::emit(IdentityCreated {
-            identity_id: object::id(&identity),
-            owner: sender,
-            role,
-            timestamp: clock::timestamp_ms(clock)
-        });
+        /// 🔥 Unified event (bootstrap trace)
+        events::emit_reputation_updated(
+            sender,
+            0,
+            true,
+            b"identity_created",
+            object::id(&identity),
+            clock_ref
+        );
 
         transfer::transfer(identity, sender);
     }
@@ -156,87 +127,87 @@ module healing_humanity::identity {
     /// -----------------------------
     /// Verify Identity
     /// -----------------------------
-
-    public entry fun verify_identity(
+    public fun verify_identity(
         identity: &mut Identity,
         _admin: &IdentityAdminCap,
-        clock: &Clock,
-        ctx: &TxContext
+        clock_ref: &Clock,
+        ctx: &tx_context::TxContext
     ) {
-
         assert!(identity.status == STATUS_ACTIVE, E_IDENTITY_INACTIVE);
 
         identity.verified = true;
 
-        event::emit(IdentityVerified {
-            identity_id: object::id(identity),
-            verifier: tx_context::sender(ctx),
-            timestamp: clock::timestamp_ms(clock)
-        });
+        events::emit_identity_verified(
+            identity.owner,
+            tx_context::sender(ctx),
+            1,
+            clock_ref
+        );
     }
 
     /// -----------------------------
     /// Update Role
     /// -----------------------------
-
-    public entry fun update_role(
+    public fun update_role(
         identity: &mut Identity,
         new_role: u8,
-        _admin: &IdentityAdminCap
+        _admin: &IdentityAdminCap,
+        clock_ref: &Clock
     ) {
-
         assert!(new_role <= ROLE_ORACLE, E_INVALID_ROLE);
 
         let old_role = identity.role;
         identity.role = new_role;
 
-        event::emit(IdentityRoleUpdated {
-            identity_id: object::id(identity),
-            old_role,
-            new_role
-        });
+        events::emit_reputation_updated(
+            identity.owner,
+            0,
+            true,
+            b"role_updated",
+            object::id(identity),
+            clock_ref
+        );
     }
 
     /// -----------------------------
     /// Suspend Identity
     /// -----------------------------
-
-    public entry fun suspend_identity(
+    public fun suspend_identity(
         identity: &mut Identity,
         _admin: &IdentityAdminCap,
-        clock: &Clock
+        clock_ref: &Clock
     ) {
-
         identity.status = STATUS_SUSPENDED;
 
-        event::emit(IdentitySuspended {
-            identity_id: object::id(identity),
-            timestamp: clock::timestamp_ms(clock)
-        });
+        events::emit_reputation_updated(
+            identity.owner,
+            0,
+            false,
+            b"suspended",
+            object::id(identity),
+            clock_ref
+        );
     }
 
     /// -----------------------------
-    /// Delegate Management
+    /// Delegation
     /// -----------------------------
-
-    public entry fun add_delegate(
+    public fun add_delegate(
         identity: &mut Identity,
         delegate: address,
-        ctx: &TxContext
+        ctx: &tx_context::TxContext
     ) {
-
         let sender = tx_context::sender(ctx);
         assert!(sender == identity.owner, E_NOT_OWNER);
 
         vector::push_back(&mut identity.delegates, delegate);
     }
 
-    public entry fun remove_delegate(
+    public fun remove_delegate(
         identity: &mut Identity,
         delegate: address,
-        ctx: &TxContext
+        ctx: &tx_context::TxContext
     ) {
-
         let sender = tx_context::sender(ctx);
         assert!(sender == identity.owner, E_NOT_OWNER);
 
@@ -253,9 +224,39 @@ module healing_humanity::identity {
     }
 
     /// -----------------------------
+    /// Oracle Helpers
+    /// -----------------------------
+    public fun assert_valid_oracle_identity(identity: &Identity) {
+        assert!(identity.status == STATUS_ACTIVE, E_IDENTITY_INACTIVE);
+        assert!(identity.verified, E_NOT_VERIFIED);
+
+        let role = identity.role;
+        assert!(role == ROLE_ORACLE || role == ROLE_AI_AGENT, E_INVALID_ROLE);
+    }
+
+    public fun is_owner_or_delegate(identity: &Identity, addr: address): bool {
+        if (identity.owner == addr) return true;
+
+        let mut i = 0;
+        let len = vector::length(&identity.delegates);
+
+        while (i < len) {
+            if (*vector::borrow(&identity.delegates, i) == addr) {
+                return true
+            };
+            i = i + 1;
+        };
+
+        false
+    }
+
+    public fun assert_owner_or_delegate(identity: &Identity, addr: address) {
+        assert!(is_owner_or_delegate(identity, addr), E_NOT_AUTHORIZED);
+    }
+
+    /// -----------------------------
     /// Helpers
     /// -----------------------------
-
     public fun is_verified(identity: &Identity): bool {
         identity.verified
     }
@@ -270,14 +271,6 @@ module healing_humanity::identity {
 
     public fun is_oracle(identity: &Identity): bool {
         identity.role == ROLE_ORACLE
-    }
-
-    public fun is_builder(identity: &Identity): bool {
-        identity.role == ROLE_BUILDER
-    }
-
-    public fun is_organization(identity: &Identity): bool {
-        identity.role == ROLE_ORGANIZATION
     }
 
     public fun get_owner(identity: &Identity): address {
