@@ -1,15 +1,17 @@
 module healing_humanity::reputation {
 
     use sui::table;
+    use sui::clock::Clock;
 
     use healing_humanity::identity;
     use healing_humanity::identity::Identity;
+    use healing_humanity::events;
 
     const E_IDENTITY_INACTIVE: u64 = 0;
     const E_NOT_FOUND: u64 = 1;
 
     /// -----------------------------
-    /// XP Struct (NOT key anymore)
+    /// XP Struct
     /// -----------------------------
     public struct XP has store {
         owner_identity: object::ID,
@@ -34,16 +36,17 @@ module healing_humanity::reputation {
             profiles: table::new(ctx),
         };
 
-        transfer::share_object(registry);
+        sui::transfer::share_object(registry);
     }
 
     /// -----------------------------
-    /// Create profile (once)
+    /// Create profile
     /// -----------------------------
     public fun create_profile(
         registry: &mut XPRegistry,
         identity: &Identity,
-        ctx: &mut tx_context::TxContext
+        clock: &Clock,
+        _ctx: &mut tx_context::TxContext
     ) {
         assert!(identity::is_active(identity), E_IDENTITY_INACTIVE);
 
@@ -56,6 +59,16 @@ module healing_humanity::reputation {
         };
 
         table::add(&mut registry.profiles, id, xp);
+
+        // EVENT
+        events::emit_reputation_updated(
+            identity::get_owner(identity),
+            0,
+            true,
+            b"profile_created",
+            id,
+            clock
+        );
     }
 
     /// -----------------------------
@@ -64,7 +77,8 @@ module healing_humanity::reputation {
     public fun add_xp(
         registry: &mut XPRegistry,
         identity: &Identity,
-        amount: u64
+        amount: u64,
+        clock: &Clock
     ) {
         let id = object::id(identity);
 
@@ -73,15 +87,26 @@ module healing_humanity::reputation {
         let xp = table::borrow_mut(&mut registry.profiles, id);
 
         xp.xp = xp.xp + amount;
+
+        // EVENT
+        events::emit_reputation_updated(
+            identity::get_owner(identity),
+            amount,
+            true,
+            b"xp_gain",
+            id,
+            clock
+        );
     }
 
     /// -----------------------------
-    /// Slash XP (SAFE)
+    /// Slash XP
     /// -----------------------------
     public fun slash_xp(
         registry: &mut XPRegistry,
         identity: &Identity,
-        amount: u64
+        amount: u64,
+        clock: &Clock
     ) {
         let id = object::id(identity);
 
@@ -89,11 +114,25 @@ module healing_humanity::reputation {
 
         let xp = table::borrow_mut(&mut registry.profiles, id);
 
+        let actual_slash;
+
         if (xp.xp > amount) {
             xp.xp = xp.xp - amount;
+            actual_slash = amount;
         } else {
+            actual_slash = xp.xp;
             xp.xp = 0;
         };
+
+        // EVENT
+        events::emit_reputation_updated(
+            identity::get_owner(identity),
+            actual_slash,
+            false,
+            b"xp_slash",
+            id,
+            clock
+        );
     }
 
     /// -----------------------------
