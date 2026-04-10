@@ -3,10 +3,19 @@ module healing_humanity::events {
     use sui::event;
     use sui::clock::Clock;
     use sui::object::ID;
+    use std::option;
 
-    /// =========================
-    /// CAMPAIGN EVENTS
-    /// =========================
+    /// ============================================================
+    /// INTERNAL HELPER
+    /// ============================================================
+
+    fun now(clock: &Clock): u64 {
+        clock.timestamp_ms()
+    }
+
+    /// ============================================================
+    /// ===================== CAMPAIGN EVENTS ======================
+    /// ============================================================
 
     public struct CampaignCreated has copy, drop {
         campaign_id: ID,
@@ -25,14 +34,12 @@ module healing_humanity::events {
         timestamp_ms: u64,
     }
 
-    /// ✅ NEW: Campaign ↔ Escrow link event
     public struct CampaignEscrowLinked has copy, drop {
         campaign_id: ID,
         escrow_id: ID,
         timestamp_ms: u64,
     }
 
-    /// ✅ NEW: Campaign funded event (aggregate-level)
     public struct CampaignFunded has copy, drop {
         campaign_id: ID,
         escrow_id: ID,
@@ -41,9 +48,9 @@ module healing_humanity::events {
         timestamp_ms: u64,
     }
 
-    /// =========================
-    /// ESCROW EVENTS
-    /// =========================
+    /// ============================================================
+    /// ======================= ESCROW EVENTS ======================
+    /// ============================================================
 
     public struct EscrowCreated has copy, drop {
         campaign_id: ID,
@@ -89,12 +96,13 @@ module healing_humanity::events {
         recipient: address,
         amount: u64,
         fee_taken: u64,
+        action_id: option::Option<ID>,
         timestamp_ms: u64,
     }
 
-    /// =========================
-    /// 🔥 NEW ORACLE EVENTS
-    /// =========================
+    /// ============================================================
+    /// ======================= ORACLE EVENTS ======================
+    /// ============================================================
 
     public struct OracleRegistered has copy, drop {
         oracle_id: ID,
@@ -129,10 +137,6 @@ module healing_humanity::events {
         timestamp_ms: u64,
     }
 
-    /// =========================
-    /// EXISTING ORACLE EVENTS
-    /// =========================
-
     public struct OracleVoteSubmitted has copy, drop {
         campaign_id: ID,
         escrow_id: ID,
@@ -154,9 +158,9 @@ module healing_humanity::events {
         timestamp_ms: u64,
     }
 
-    /// =========================
-    /// FEES + TREASURY
-    /// =========================
+    /// ============================================================
+    /// ==================== FEES & TREASURY =======================
+    /// ============================================================
 
     public struct FeeCollected has copy, drop {
         campaign_id: ID,
@@ -164,18 +168,65 @@ module healing_humanity::events {
         amount: u64,
         fee_bps: u64,
         payer: address,
+        action_id: option::Option<ID>,
         timestamp_ms: u64,
     }
 
     public struct TreasuryDeposit has copy, drop {
         source: vector<u8>,
         amount: u64,
+        action_id: option::Option<ID>,
         timestamp_ms: u64,
     }
 
-    /// =========================
-    /// REPUTATION + IDENTITY
-    /// =========================
+    /// ============================================================
+    /// ===================== GOVERNANCE EVENTS ====================
+    /// ============================================================
+
+    public struct ProtocolFeeUpdated has copy, drop {
+        new_fee_bps: u64,
+        admin: address,
+        action_id: option::Option<ID>,
+        timestamp_ms: u64,
+    }
+
+    public struct OracleUpdated has copy, drop {
+        new_oracle: address,
+        admin: address,
+        action_id: option::Option<ID>,
+        timestamp_ms: u64,
+    }
+
+    public struct TreasuryUpdated has copy, drop {
+        new_treasury: address,
+        admin: address,
+        action_id: option::Option<ID>,
+        timestamp_ms: u64,
+    }
+
+    public struct VersionBumped has copy, drop {
+        new_version: u64,
+        admin: address,
+        action_id: option::Option<ID>,
+        timestamp_ms: u64,
+    }
+
+    public struct ProtocolPaused has copy, drop {
+        admin: address,
+        reason: vector<u8>,
+        action_id: option::Option<ID>,
+        timestamp_ms: u64,
+    }
+
+    public struct ProtocolUnpaused has copy, drop {
+        admin: address,
+        action_id: option::Option<ID>,
+        timestamp_ms: u64,
+    }
+
+    /// ============================================================
+    /// ================= REPUTATION & IDENTITY ====================
+    /// ============================================================
 
     public struct ReputationUpdated has copy, drop {
         user: address,
@@ -193,32 +244,11 @@ module healing_humanity::events {
         timestamp_ms: u64,
     }
 
-    /// =========================
-    /// CIRCUIT BREAKER
-    /// =========================
+    /// ============================================================
+    /// ===================== EMIT FUNCTIONS =======================
+    /// ============================================================
 
-    public struct ProtocolPaused has copy, drop {
-        admin: address,
-        reason: vector<u8>,
-        timestamp_ms: u64,
-    }
-
-    public struct ProtocolUnpaused has copy, drop {
-        admin: address,
-        timestamp_ms: u64,
-    }
-
-    /// =========================
-    /// INTERNAL HELPER
-    /// =========================
-
-    fun now(clock: &Clock): u64 {
-        clock.timestamp_ms()
-    }
-
-    /// =========================
-    /// EMIT FUNCTIONS
-    /// =========================
+    /// -------- Campaign --------
 
     public fun emit_campaign_created(
         campaign_id: ID,
@@ -254,7 +284,6 @@ module healing_humanity::events {
         });
     }
 
-    /// ✅ FIXED FUNCTION
     public fun emit_campaign_escrow_linked(
         campaign_id: ID,
         escrow_id: ID,
@@ -267,7 +296,6 @@ module healing_humanity::events {
         });
     }
 
-    /// ✅ FIXED FUNCTION
     public fun emit_campaign_funded(
         campaign_id: ID,
         escrow_id: ID,
@@ -283,6 +311,8 @@ module healing_humanity::events {
             timestamp_ms: now(clock),
         });
     }
+
+    /// -------- Escrow --------
 
     public fun emit_escrow_created(
         campaign_id: ID,
@@ -365,6 +395,7 @@ module healing_humanity::events {
         recipient: address,
         amount: u64,
         fee_taken: u64,
+        action_id: option::Option<ID>,
         clock: &Clock
     ) {
         event::emit(EscrowReleased {
@@ -374,51 +405,12 @@ module healing_humanity::events {
             recipient,
             amount,
             fee_taken,
+            action_id,
             timestamp_ms: now(clock),
         });
     }
 
-    public fun emit_oracle_vote(
-        campaign_id: ID,
-        escrow_id: ID,
-        milestone_id: u64,
-        oracle: address,
-        vote: bool,
-        round: u64,
-        clock: &Clock
-    ) {
-        event::emit(OracleVoteSubmitted {
-            campaign_id,
-            escrow_id,
-            milestone_id,
-            oracle,
-            vote,
-            round,
-            timestamp_ms: now(clock),
-        });
-    }
-
-    public fun emit_oracle_result(
-        campaign_id: ID,
-        escrow_id: ID,
-        milestone_id: u64,
-        round: u64,
-        result: bool,
-        total_votes: u64,
-        approvals: u64,
-        clock: &Clock
-    ) {
-        event::emit(OracleRoundFinalized {
-            campaign_id,
-            escrow_id,
-            milestone_id,
-            round,
-            result,
-            total_votes,
-            approvals,
-            timestamp_ms: now(clock),
-        });
-    }
+    /// -------- Oracle --------
 
     public fun emit_oracle_registered(
         oracle_id: ID,
@@ -486,12 +478,143 @@ module healing_humanity::events {
         });
     }
 
+    public fun emit_oracle_vote(
+        campaign_id: ID,
+        escrow_id: ID,
+        milestone_id: u64,
+        oracle: address,
+        vote: bool,
+        round: u64,
+        clock: &Clock
+    ) {
+        event::emit(OracleVoteSubmitted {
+            campaign_id,
+            escrow_id,
+            milestone_id,
+            oracle,
+            vote,
+            round,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_oracle_result(
+        campaign_id: ID,
+        escrow_id: ID,
+        milestone_id: u64,
+        round: u64,
+        result: bool,
+        total_votes: u64,
+        approvals: u64,
+        clock: &Clock
+    ) {
+        event::emit(OracleRoundFinalized {
+            campaign_id,
+            escrow_id,
+            milestone_id,
+            round,
+            result,
+            total_votes,
+            approvals,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    /// -------- Governance --------
+
+    public fun emit_protocol_fee_updated(
+        new_fee_bps: u64,
+        admin: address,
+        action_id: option::Option<ID>,
+        clock: &Clock
+    ) {
+        event::emit(ProtocolFeeUpdated {
+            new_fee_bps,
+            admin,
+            action_id,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_protocol_paused(
+        admin: address,
+        reason: vector<u8>,
+        action_id: option::Option<ID>,
+        clock: &Clock
+    ) {
+        event::emit(ProtocolPaused {
+            admin,
+            reason,
+            action_id,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_protocol_unpaused(
+        admin: address,
+        action_id: option::Option<ID>,
+        clock: &Clock
+    ) {
+        event::emit(ProtocolUnpaused {
+            admin,
+            action_id,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    /// -------- Missing Governance Emits --------
+
+    public fun emit_oracle_updated(
+        new_oracle: address,
+        admin: address,
+        action_id: option::Option<ID>,
+        clock: &Clock
+    ) {
+        event::emit(OracleUpdated {
+            new_oracle,
+            admin,
+            action_id,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_treasury_updated(
+        new_treasury: address,
+        admin: address,
+        action_id: option::Option<ID>,
+        clock: &Clock
+    ) {
+        event::emit(TreasuryUpdated {
+            new_treasury,
+            admin,
+            action_id,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_version_bumped(
+        new_version: u64,
+        admin: address,
+        action_id: option::Option<ID>,
+        clock: &Clock
+    ) {
+        event::emit(VersionBumped {
+            new_version,
+            admin,
+            action_id,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    /// -------- Treasury / Fee Emits --------
+
     public fun emit_fee_collected(
         campaign_id: ID,
         escrow_id: ID,
         amount: u64,
         fee_bps: u64,
         payer: address,
+        action_id: option::Option<ID>,
         clock: &Clock
     ) {
         event::emit(FeeCollected {
@@ -500,6 +623,7 @@ module healing_humanity::events {
             amount,
             fee_bps,
             payer,
+            action_id,
             timestamp_ms: now(clock),
         });
     }
@@ -507,24 +631,28 @@ module healing_humanity::events {
     public fun emit_treasury_deposit(
         source: vector<u8>,
         amount: u64,
+        action_id: option::Option<ID>,
         clock: &Clock
     ) {
         event::emit(TreasuryDeposit {
             source,
             amount,
+            action_id,
             timestamp_ms: now(clock),
         });
     }
-
+    
+    /// -------- Reputation Emits --------
+    
     public fun emit_reputation_updated(
-        user: address,
-        delta: u64,
-        is_positive: bool,
-        reason: vector<u8>,
-        campaign_id: ID,
-        clock: &Clock
+    user: address,
+    delta: u64,
+    is_positive: bool,
+    reason: vector<u8>,
+    campaign_id: ID,
+    clock: &Clock
     ) {
-        event::emit(ReputationUpdated {
+    	event::emit(ReputationUpdated {
             user,
             delta,
             is_positive,
@@ -534,6 +662,7 @@ module healing_humanity::events {
         });
     }
 
+    /// -------- Identity Emits --------
     public fun emit_identity_verified(
         user: address,
         verifier: address,
@@ -544,28 +673,6 @@ module healing_humanity::events {
             user,
             verifier,
             level,
-            timestamp_ms: now(clock),
-        });
-    }
-
-    public fun emit_protocol_paused(
-        admin: address,
-        reason: vector<u8>,
-        clock: &Clock
-    ) {
-        event::emit(ProtocolPaused {
-            admin,
-            reason,
-            timestamp_ms: now(clock),
-        });
-    }
-
-    public fun emit_protocol_unpaused(
-        admin: address,
-        clock: &Clock
-    ) {
-        event::emit(ProtocolUnpaused {
-            admin,
             timestamp_ms: now(clock),
         });
     }
