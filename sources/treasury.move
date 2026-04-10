@@ -2,10 +2,15 @@ module healing_humanity::treasury {
 
     use sui::balance;
     use sui::coin::{Self, Coin};
-    use sui::event;
+    use sui::object;
+    use sui::tx_context::{Self, TxContext};
+    use sui::clock::Clock;
+
+    use std::option;
 
     use healing_humanity::circuit_breaker;
     use healing_humanity::protocol_governance;
+    use healing_humanity::events;
 
     /// =========================
     /// ERRORS
@@ -16,35 +21,16 @@ module healing_humanity::treasury {
     const E_INVALID_RECIPIENT: u64 = 3;
 
     /// =========================
-    /// EVENTS
-    /// =========================
-    public struct TreasuryCreatedEvent has copy, drop {
-        creator: address,
-        treasury_id: sui::object::ID,
-        initial_amount: u64,
-    }
-
-    public struct TreasuryDepositEvent has copy, drop {
-        sender: address,
-        amount: u64,
-    }
-
-    public struct TreasuryWithdrawEvent has copy, drop {
-        recipient: address,
-        amount: u64,
-    }
-
-    /// =========================
     /// TREASURY STORAGE
     /// =========================
     public struct Treasury has key {
-        id: sui::object::UID,
+        id: object::UID,
         balance: balance::Balance<sui::sui::SUI>,
     }
 
     public struct TreasuryCap has key {
-        id: sui::object::UID,
-        treasury_id: sui::object::ID,
+        id: object::UID,
+        treasury_id: object::ID,
     }
 
     /// =========================
@@ -52,30 +38,33 @@ module healing_humanity::treasury {
     /// =========================
     public fun create(
         initial_coin: Coin<sui::sui::SUI>,
+        clock: &Clock,
         ctx: &mut TxContext
     ): TreasuryCap {
 
         let initial_amount = coin::value(&initial_coin);
 
         let treasury = Treasury {
-            id: sui::object::new(ctx),
+            id: object::new(ctx),
             balance: coin::into_balance(initial_coin),
         };
 
-        let treasury_id = sui::object::id(&treasury);
+        let treasury_id = object::id(&treasury);
 
         let cap = TreasuryCap {
-            id: sui::object::new(ctx),
+            id: object::new(ctx),
             treasury_id,
         };
 
         sui::transfer::share_object(treasury);
 
-        event::emit(TreasuryCreatedEvent {
-            creator: tx_context::sender(ctx),
-            treasury_id,
-            initial_amount
-        });
+        /// 🔥 FIXED: pass clock instead of ctx
+        events::emit_treasury_deposit(
+            b"treasury_create",
+            initial_amount,
+            option::none(),
+            clock
+        );
 
         cap
     }
@@ -88,7 +77,7 @@ module healing_humanity::treasury {
         treasury: &Treasury
     ) {
         assert!(
-            sui::object::id(treasury) == cap.treasury_id,
+            object::id(treasury) == cap.treasury_id,
             E_WRONG_TREASURY
         );
     }
@@ -100,10 +89,9 @@ module healing_humanity::treasury {
         cfg: &protocol_governance::ProtocolConfig,
         treasury: &mut Treasury,
         coin_in: Coin<sui::sui::SUI>,
+        clock: &Clock,
         ctx: &TxContext
     ) {
-
-        // Respect global protocol pause
         protocol_governance::assert_protocol_active(cfg);
 
         let amount = coin::value(&coin_in);
@@ -112,10 +100,12 @@ module healing_humanity::treasury {
         let bal = coin::into_balance(coin_in);
         balance::join(&mut treasury.balance, bal);
 
-        event::emit(TreasuryDepositEvent {
-            sender: tx_context::sender(ctx),
-            amount
-        });
+        events::emit_treasury_deposit(
+            b"user_deposit",
+            amount,
+            option::none(),
+            clock
+        );
     }
 
     /// =========================
@@ -128,13 +118,11 @@ module healing_humanity::treasury {
         cb: &circuit_breaker::CircuitBreaker,
         amount: u64,
         recipient: address,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
-
-        // Respect global protocol pause
         protocol_governance::assert_protocol_active(cfg);
 
-        // Circuit breaker protection
         assert!(
             !circuit_breaker::withdrawals_paused(cb),
             E_WITHDRAWALS_PAUSED
@@ -144,9 +132,7 @@ module healing_humanity::treasury {
 
         assert_correct_treasury(cap, treasury);
 
-        // Only allow withdrawals to governance treasury address
         let treasury_addr = protocol_governance::treasury(cfg);
-
         assert!(recipient == treasury_addr, E_INVALID_RECIPIENT);
 
         let bal = balance::split(&mut treasury.balance, amount);
@@ -154,10 +140,12 @@ module healing_humanity::treasury {
 
         sui::transfer::public_transfer(coin_out, recipient);
 
-        event::emit(TreasuryWithdrawEvent {
-            recipient,
-            amount
-        });
+        events::emit_treasury_deposit(
+            b"withdraw",
+            amount,
+            option::none(),
+            clock
+        );
     }
 
     /// =========================
