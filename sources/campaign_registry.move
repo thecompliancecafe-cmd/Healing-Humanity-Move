@@ -2,6 +2,11 @@ module healing_humanity::campaign_registry {
 
     use sui::table::{Self, Table};
     use sui::clock::Clock;
+    use sui::tx_context::{Self, TxContext};
+    use sui::object;
+    use sui::transfer;
+    use std::vector;
+    use std::option;
 
     use healing_humanity::protocol_fees;
     use healing_humanity::circuit_breaker;
@@ -67,13 +72,13 @@ module healing_humanity::campaign_registry {
         }
     }
 
-    fun assert_valid_transition(old: CampaignStatus, _new: CampaignStatus) {
+    fun assert_valid_transition(old: CampaignStatus, new: CampaignStatus) {
         if (
-            (old == CampaignStatus::CREATED && _new == CampaignStatus::ACTIVE) ||
-            (old == CampaignStatus::ACTIVE && _new == CampaignStatus::PAUSED) ||
-            (old == CampaignStatus::PAUSED && _new == CampaignStatus::ACTIVE) ||
-            (old == CampaignStatus::ACTIVE && _new == CampaignStatus::COMPLETED) ||
-            (_new == CampaignStatus::REVOKED)
+            (old == CampaignStatus::CREATED && new == CampaignStatus::ACTIVE) ||
+            (old == CampaignStatus::ACTIVE && new == CampaignStatus::PAUSED) ||
+            (old == CampaignStatus::PAUSED && new == CampaignStatus::ACTIVE) ||
+            (old == CampaignStatus::ACTIVE && new == CampaignStatus::COMPLETED) ||
+            (new == CampaignStatus::REVOKED)
         ) {
             return;
         };
@@ -83,7 +88,7 @@ module healing_humanity::campaign_registry {
     /// -----------------------------
     /// Create registry
     /// -----------------------------
-    public fun create_registry(ctx: &mut tx_context::TxContext) {
+    public fun create_registry(ctx: &mut TxContext) {
         let registry = CampaignRegistry {
             id: object::new(ctx),
             campaigns: table::new(ctx),
@@ -102,7 +107,7 @@ module healing_humanity::campaign_registry {
         target: u64,
         tier: u8,
         clock: &Clock,
-        ctx: &mut tx_context::TxContext
+        ctx: &mut TxContext
     ) {
 
         protocol_governance::assert_protocol_active(cfg);
@@ -193,7 +198,7 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// 🧠 ORACLE / ESCROW COMPLETION
+    /// 🧠 COMPLETION
     /// -----------------------------
     public fun mark_completed_internal(
         campaign: &mut Campaign,
@@ -229,7 +234,7 @@ module healing_humanity::campaign_registry {
         cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
         clock: &Clock,
-        ctx: &tx_context::TxContext
+        ctx: &mut TxContext
     ) {
         protocol_governance::assert_protocol_active(cfg);
         assert!(!circuit_breaker::campaigns_paused(cb), E_PROTOCOL_PAUSED);
@@ -255,7 +260,7 @@ module healing_humanity::campaign_registry {
         cb: &circuit_breaker::CircuitBreaker,
         campaign: &mut Campaign,
         clock: &Clock,
-        ctx: &tx_context::TxContext
+        ctx: &mut TxContext
     ) {
         protocol_governance::assert_protocol_active(cfg);
         assert!(!circuit_breaker::campaigns_paused(cb), E_PROTOCOL_PAUSED);
@@ -283,7 +288,7 @@ module healing_humanity::campaign_registry {
         cfg: &protocol_governance::ProtocolConfig,
         campaign: &mut Campaign,
         clock: &Clock,
-        ctx: &tx_context::TxContext
+        ctx: &mut TxContext
     ) {
         assert!(
             protocol_governance::is_admin(cfg, tx_context::sender(ctx)),
