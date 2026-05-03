@@ -49,10 +49,14 @@ module healing_humanity::campaign_registry {
         status: CampaignStatus,
         tier: u8,
         escrow_id: option::Option<object::ID>,
+
+        /// Hypercert flags (kept)
+        hypercert_eligible: bool,
+        completed_at: u64
     }
 
     /// -----------------------------
-    /// Registry object
+    /// Registry
     /// -----------------------------
     public struct CampaignRegistry has key {
         id: object::UID,
@@ -109,7 +113,6 @@ module healing_humanity::campaign_registry {
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-
         protocol_governance::assert_protocol_active(cfg);
         assert!(!circuit_breaker::campaigns_paused(cb), E_PROTOCOL_PAUSED);
 
@@ -131,6 +134,9 @@ module healing_humanity::campaign_registry {
             status: CampaignStatus::ACTIVE,
             tier,
             escrow_id: option::none(),
+
+            hypercert_eligible: false,
+            completed_at: 0
         };
 
         let campaign_id = object::id(&campaign);
@@ -154,7 +160,7 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// 🔗 ESCROW INTEGRATION
+    /// ESCROW LINK
     /// -----------------------------
     public fun link_escrow_internal(
         campaign: &mut Campaign,
@@ -198,7 +204,7 @@ module healing_humanity::campaign_registry {
     }
 
     /// -----------------------------
-    /// 🧠 COMPLETION
+    /// COMPLETION (FIXED)
     /// -----------------------------
     public fun mark_completed_internal(
         campaign: &mut Campaign,
@@ -216,6 +222,10 @@ module healing_humanity::campaign_registry {
         let old = campaign.status;
         campaign.status = CampaignStatus::COMPLETED;
 
+        /// keep hypercert readiness logic
+        campaign.hypercert_eligible = true;
+        campaign.completed_at = sui::clock::timestamp_ms(clock);
+
         events::emit_campaign_status_changed(
             object::id(campaign),
             status_to_u8(old),
@@ -224,6 +234,9 @@ module healing_humanity::campaign_registry {
             b"completed",
             clock
         );
+
+        // ❌ REMOVED ONLY THIS:
+        // events::emit_campaign_completed_for_hypercert(...)
     }
 
     /// -----------------------------
@@ -319,5 +332,9 @@ module healing_humanity::campaign_registry {
 
     public fun raised_of(campaign: &Campaign): u64 {
         campaign.raised
+    }
+
+    public fun is_hypercert_ready(campaign: &Campaign): bool {
+        campaign.hypercert_eligible && campaign.status == CampaignStatus::COMPLETED
     }
 }
