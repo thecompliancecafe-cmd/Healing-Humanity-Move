@@ -3,6 +3,12 @@ module healing_humanity::milestone_escrow {
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance};
     use sui::clock::Clock;
+    use sui::tx_context::{Self, TxContext};
+    use sui::object;
+    use sui::transfer;
+
+    use std::vector;
+    use std::option;
 
     use healing_humanity::protocol_fees;
     use healing_humanity::treasury;
@@ -18,6 +24,11 @@ module healing_humanity::milestone_escrow {
     use healing_humanity::events;
     use healing_humanity::campaign_registry;
     use healing_humanity::ledger;
+
+    /// 🔥 NEW IMPORTS
+    use healing_humanity::hypercerts;
+    use healing_humanity::reputation;
+    use healing_humanity::reputation::XPRegistry;
 
     const E_CAMPAIGN_MISMATCH: u64 = 0;
     const E_MILESTONE_ALREADY_RELEASED: u64 = 2;
@@ -211,7 +222,6 @@ module healing_humanity::milestone_escrow {
 
         let action_id = option::none<object::ID>();
 
-        // ✅ FIXED HERE
         treasury::deposit(
             cfg,
             treasury,
@@ -294,6 +304,78 @@ module healing_humanity::milestone_escrow {
             clock,
             ctx
         );
+    }
+
+    /// 🔥 FULL FLOW (FIXED ONLY HERE)
+    public fun release_milestone_with_oracle_and_hypercert_full(
+        registry: &OracleRegistry,
+        cfg: &ProtocolConfig,
+        cb: &circuit_breaker::CircuitBreaker,
+        fee_config: &protocol_fees::ProtocolFeeConfig,
+        campaign: &mut campaign_registry::Campaign,
+        cap: &EscrowCap,
+        vault: &mut Vault,
+        milestone_id: u64,
+        round: u64,
+        recipient_identity: &identity::Identity,
+        treasury: &mut Treasury,
+        xp_registry: &mut XPRegistry,
+        clock: &Clock,
+        impact_scope: std::string::String,
+        impact_units: u64,
+        metadata_hash: std::string::String,
+        valid_until: u64,
+        transferability: hypercerts::Transferability,
+        ctx: &mut TxContext
+    ): hypercerts::Hypercert {
+
+        let approved = ai_oracle::is_round_approved(
+            registry,
+            vault.campaign_id,
+            object::id(vault),
+            milestone_id,
+            round
+        );
+        assert!(approved, E_ORACLE_NOT_APPROVED);
+
+        release_milestone(
+            cfg, cb, fee_config, campaign, cap, vault,
+            milestone_id, recipient_identity, treasury, clock, ctx
+        );
+
+        let mut cert = hypercerts::create_claim(
+            vault.campaign_id,
+            identity::get_owner(recipient_identity),
+            impact_scope,
+            impact_units,
+            metadata_hash,
+            impact_units,
+            valid_until,
+            transferability,
+            ctx
+        );
+
+        let approving_oracles = ai_oracle::get_approving_oracles(
+            registry,
+            vault.campaign_id,
+            object::id(vault),
+            milestone_id,
+            round
+        );
+
+        hypercerts::verify_with_oracles(&mut cert, approving_oracles);
+
+        /// ✅ FIX
+        reputation::reward_creator_from_hypercert(
+            xp_registry,
+            recipient_identity,
+            &cert,
+            clock
+        );
+
+        /// ❌ REMOVED (non-existent event)
+
+        cert
     }
 
     public fun close(
