@@ -29,6 +29,9 @@ module healing_humanity::protocol_governance {
     const ACTION_UNPAUSE: u8 = 5;
     const ACTION_VERSION_BUMP: u8 = 6;
 
+    /// synthetic tier (since governance has single fee)
+    const GLOBAL_TIER: u8 = 0;
+
     /// =========================
     /// STORAGE
     /// =========================
@@ -101,7 +104,6 @@ module healing_humanity::protocol_governance {
         assert!(found, E_NOT_ADMIN);
     }
 
-    /// PUBLIC ADMIN CHECK
     public fun is_admin(cfg: &ProtocolConfig, addr: address): bool {
         let len = vector::length(&cfg.admins);
         let mut i = 0;
@@ -117,7 +119,7 @@ module healing_humanity::protocol_governance {
     }
 
     /// =========================
-    /// QUEUE GOVERNANCE ACTION
+    /// QUEUE ACTION
     /// =========================
     public fun queue_action(
         _admin: &GovAdminCap,
@@ -141,13 +143,13 @@ module healing_humanity::protocol_governance {
             execute_after,
         };
 
-        let id = object::id(&action); // correct
+        let id = object::id(&action);
         transfer::share_object(action);
         id
     }
 
     /// =========================
-    /// EXECUTE GOVERNANCE ACTION
+    /// EXECUTE ACTION
     /// =========================
     public fun execute_action(
         _admin: &GovAdminCap,
@@ -164,16 +166,22 @@ module healing_humanity::protocol_governance {
             E_TIMELOCK_NOT_READY
         );
 
-        let id = object::id(action); // ✅ FIXED (no extra borrow)
+        let id = object::id(action);
         let action_id = option::some(id);
 
-        /// SET FEE
+        /// SET FEE (FIXED)
         if (action.action_type == ACTION_SET_FEE) {
             assert!(action.value_u64 <= 10_000, E_INVALID_FEE);
-            cfg.protocol_fee_bps = action.value_u64;
+
+            let old_fee = cfg.protocol_fee_bps;
+            let new_fee = action.value_u64;
+
+            cfg.protocol_fee_bps = new_fee;
 
             events::emit_protocol_fee_updated(
-                action.value_u64,
+                GLOBAL_TIER,
+                old_fee,
+                new_fee,
                 sender,
                 action_id,
                 clock
