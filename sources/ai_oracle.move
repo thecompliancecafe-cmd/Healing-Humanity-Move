@@ -3,10 +3,15 @@ module healing_humanity::ai_oracle {
     use sui::clock;
     use sui::table;
     use sui::bcs;
+    use sui::object;
+    use sui::tx_context;
+    use sui::transfer;
 
     use healing_humanity::identity;
     use healing_humanity::circuit_breaker;
     use healing_humanity::events;
+
+    use healing_humanity::hypercerts;
 
     /// -----------------------------
     /// Errors
@@ -23,7 +28,7 @@ module healing_humanity::ai_oracle {
     const E_ROUND_EXPIRED: u64 = 10;
 
     /// -----------------------------
-    /// Oracle Data
+    /// Oracle Info
     /// -----------------------------
     public struct OracleInfo has drop, store {
         owner: address,
@@ -48,12 +53,19 @@ module healing_humanity::ai_oracle {
         total_votes: u64,
         finalized: bool,
         voters: table::Table<object::ID, bool>,
+
+        /// 🔥 NEW FIELD (fix)
+        approving_oracles: vector<address>,
+
         quorum: u64,
         created_at: u64,
         expiry_ms: u64,
         finalized_by: address
     }
 
+    /// -----------------------------
+    /// Registry
+    /// -----------------------------
     public struct OracleRegistry has key {
         id: object::UID,
         oracles: table::Table<object::ID, OracleInfo>,
@@ -65,6 +77,9 @@ module healing_humanity::ai_oracle {
         id: object::UID,
     }
 
+    /// -----------------------------
+    /// Init
+    /// -----------------------------
     fun init(ctx: &mut tx_context::TxContext) {
         let registry = OracleRegistry {
             id: object::new(ctx),
@@ -208,6 +223,10 @@ module healing_humanity::ai_oracle {
             total_votes: 0,
             finalized: false,
             voters: table::new(ctx),
+
+            /// 🔥 INIT
+            approving_oracles: vector::empty(),
+
             quorum,
             created_at: now,
             expiry_ms,
@@ -273,6 +292,9 @@ module healing_humanity::ai_oracle {
 
         if (vote) {
             vr.approvals = vr.approvals + weight;
+
+            /// 🔥 STORE APPROVER
+            vector::push_back(&mut vr.approving_oracles, info.owner);
         } else {
             vr.rejections = vr.rejections + weight;
         };
@@ -338,7 +360,38 @@ module healing_humanity::ai_oracle {
         result
     }
 
-    /// ✅ REQUIRED BY ESCROW
+    /// -----------------------------
+    /// Hypercert Hook
+    /// -----------------------------
+    public fun finalize_hypercert_verification(
+        cert: &mut hypercerts::Hypercert,
+        approved: bool
+    ) {
+        hypercerts::finalize_verification(cert, approved);
+    }
+
+    /// -----------------------------
+    /// Get Approving Oracles ✅
+    /// -----------------------------
+    public fun get_approving_oracles(
+        registry: &OracleRegistry,
+        campaign_id: object::ID,
+        escrow_id: object::ID,
+        milestone_id: u64,
+        round: u64
+    ): vector<address> {
+
+        let key = round_key(campaign_id, escrow_id, milestone_id, round);
+        assert!(table::contains(&registry.rounds, key), E_ROUND_NOT_FOUND);
+
+        let vr = table::borrow(&registry.rounds, key);
+
+        vr.approving_oracles
+    }
+
+    /// -----------------------------
+    /// Escrow Check
+    /// -----------------------------
     public fun is_round_approved(
         registry: &OracleRegistry,
         campaign_id: object::ID,
@@ -360,7 +413,7 @@ module healing_humanity::ai_oracle {
     }
 
     /// -----------------------------
-    /// Helpers
+    /// Helper
     /// -----------------------------
     public fun is_oracle(
         registry: &OracleRegistry,
