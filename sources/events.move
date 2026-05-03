@@ -184,6 +184,8 @@ module healing_humanity::events {
     /// ============================================================
 
     public struct ProtocolFeeUpdated has copy, drop {
+        tier: u8,
+        old_fee_bps: u64,
         new_fee_bps: u64,
         admin: address,
         action_id: option::Option<ID>,
@@ -244,6 +246,49 @@ module healing_humanity::events {
         timestamp_ms: u64,
     }
 
+
+    /// ============================================================
+    /// ===================== HYPERCERT EVENTS =====================
+    /// ============================================================
+
+    public struct HypercertMinted has copy, drop {
+        hypercert_id: ID,
+        campaign_id: ID,
+        total_units: u64,
+        creator: address,
+        timestamp_ms: u64,
+    }
+
+    public struct HypercertVerified has copy, drop {
+        hypercert_id: ID,
+        oracle_count: u64,
+        timestamp_ms: u64,
+    }
+
+    public struct HypercertRejected has copy, drop {
+        hypercert_id: ID,
+        timestamp_ms: u64,
+    }
+
+    public struct FractionMinted has copy, drop {
+        hypercert_id: ID,
+        owner: address,
+        units: u64,
+        timestamp_ms: u64,
+    }
+
+    public struct FractionTransferred has copy, drop {
+        fraction_id: ID,
+        from: address,
+        to: address,
+        timestamp_ms: u64,
+    }
+
+    public struct HypercertRevoked has copy, drop {
+        hypercert_id: ID,
+        timestamp_ms: u64,
+    }
+    
     /// ============================================================
     /// ===================== EMIT FUNCTIONS =======================
     /// ============================================================
@@ -523,12 +568,16 @@ module healing_humanity::events {
     /// -------- Governance --------
 
     public fun emit_protocol_fee_updated(
+        tier: u8,
+        old_fee_bps: u64,
         new_fee_bps: u64,
         admin: address,
         action_id: option::Option<ID>,
         clock: &Clock
     ) {
         event::emit(ProtocolFeeUpdated {
+            tier,
+            old_fee_bps,
             new_fee_bps,
             admin,
             action_id,
@@ -673,6 +722,84 @@ module healing_humanity::events {
             user,
             verifier,
             level,
+            timestamp_ms: now(clock),
+        });
+    }
+    
+    /// -------- Hypercert --------
+
+    public fun emit_hypercert_minted(
+        hypercert_id: ID,
+        campaign_id: ID,
+        total_units: u64,
+        creator: address,
+        clock: &Clock
+    ) {
+        event::emit(HypercertMinted {
+            hypercert_id,
+            campaign_id,
+            total_units,
+            creator,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_hypercert_verified(
+        hypercert_id: ID,
+        oracle_count: u64,
+        clock: &Clock
+    ) {
+        event::emit(HypercertVerified {
+            hypercert_id,
+            oracle_count,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_hypercert_rejected(
+        hypercert_id: ID,
+        clock: &Clock
+    ) {
+        event::emit(HypercertRejected {
+            hypercert_id,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_fraction_minted(
+        hypercert_id: ID,
+        owner: address,
+        units: u64,
+        clock: &Clock
+    ) {
+        event::emit(FractionMinted {
+            hypercert_id,
+            owner,
+            units,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_fraction_transferred(
+        fraction_id: ID,
+        from: address,
+        to: address,
+        clock: &Clock
+    ) {
+        event::emit(FractionTransferred {
+            fraction_id,
+            from,
+            to,
+            timestamp_ms: now(clock),
+        });
+    }
+
+    public fun emit_hypercert_revoked(
+        hypercert_id: ID,
+        clock: &Clock
+    ) {
+        event::emit(HypercertRevoked {
+            hypercert_id,
             timestamp_ms: now(clock),
         });
     }
